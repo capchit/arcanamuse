@@ -47,7 +47,10 @@ export default function InspirationViewPage() {
       link.click()
     } catch (e) { console.error(e) }
   }
-
+if (typeof window === 'undefined') {
+    return null // или спиннер загрузки
+  }
+  
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent"></div></div>
   if (!card) return <div className="min-h-screen flex items-center justify-center text-white">Карта не найдена</div>
 
@@ -131,3 +134,4 @@ export default function InspirationViewPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

@@ -1,5 +1,6 @@
 // app/my-path/page.js
-'use client'
+'use client'  // 👈 Обязательно в самой первой строке!
+
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { getUserActivePath, finishQuest, uncompleteQuest, finishPath, restorePath } from '@/app/actions'
@@ -60,14 +61,18 @@ export default function MyPathPage() {
       alert('Ошибка завершения пути')
     }
   }
+  if (typeof window === 'undefined') {
+      return null // или спиннер загрузки
+    }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Загрузка пути...</div>
-  if (!path) return <div className="min-h-screen flex items-center justify-center text-gray-500">Путь не найден</div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Загрузка пути...</div>
+    if (!path) return <div className="min-h-screen flex items-center justify-center text-gray-500">Путь не найден</div>
 
   // Подсчет прогресса
   const total = path.quests.length
   const completed = path.quests.filter(q => q.status === 'completed').length
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0
+  
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} pb-24`}>
@@ -177,4 +182,6 @@ export default function MyPathPage() {
       </div>
     </div>
   )
+
 }
+export const dynamic = 'force-dynamic'

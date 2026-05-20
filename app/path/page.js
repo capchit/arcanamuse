@@ -65,7 +65,9 @@ export default function CreatePathPage() {
     } catch (e) { alert('Ошибка: ' + e.message) }
     finally { setLoading(false) }
   }
-
+ if (typeof window === 'undefined') {
+    return null // или спиннер загрузки
+  }
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} p-4`}>
       <div className="max-w-md mx-auto space-y-6">
@@ -187,3 +189,4 @@ export default function CreatePathPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

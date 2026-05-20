@@ -44,7 +44,9 @@ export default function GenerateInspirationPage() {
       link.click()
     } catch (e) { console.error(e) }
   }
-
+ if (typeof window === 'undefined') {
+    return null // или спиннер загрузки
+  }
   return (
     <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'} flex flex-col p-4`}>
       <div className="w-full max-w-md mx-auto space-y-6 flex-1">
@@ -197,3 +199,4 @@ export default function GenerateInspirationPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'
