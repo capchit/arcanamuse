@@ -1,5 +1,4 @@
 // app/layout.js
-'use client'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import BottomNav from '@/app/components/BottomNav'
@@ -24,4 +23,3 @@ export default function RootLayout({ children }) {
     </html>
   )
 }
-export const dynamic = 'force-dynamic'
