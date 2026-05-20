@@ -1,30 +1,18 @@
 // app/path/manual/page.js
+// ❌ НЕ добавляй 'use client' сюда — это серверный компонент!
 import { Suspense } from 'react'
-import ManualPathContent from './ManualPathContent'
+import SearchParamsWrapper from './SearchParamsWrapper'
 
-// 👇 Этот компонент НЕ 'use client' — он серверный, просто оборачивает в Suspense
 export default function ManualPathPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Загрузка редактора...
+        Загрузка...
       </div>
     }>
-      <ManualPathContentWrapper />
+      <SearchParamsWrapper />
     </Suspense>
   )
 }
 
-// 👇 Вспомогательный клиентский компонент для получения searchParams
-'use client'
-import { useSearchParams } from 'next/navigation'
-
-function ManualPathContentWrapper() {
-  const searchParams = useSearchParams()
-  const pathId = searchParams.get('pathId')
-  
-  return <ManualPathContent pathId={pathId} />
-}
-
-// 👈 ОБЯЗАТЕЛЬНО: последняя строка!
 export const dynamic = 'force-dynamic'
