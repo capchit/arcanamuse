@@ -1,17 +1,10 @@
 import type { NextConfig } from "next";
 
-// @ts-ignore
-import withPWA from 'next-pwa';
-
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
-  // 👇 Добавьте эту строку, чтобы "успокоить" Turbopack
-  turbopack: {}, 
+  // output: 'export',  // 👈 ЗАКОММЕНТИРУЙ ЭТУ СТРОКУ
+  images: { 
+    unoptimized: true 
+  },
 };
 
-export default withPWA({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-})(nextConfig);
+export default nextConfig;
