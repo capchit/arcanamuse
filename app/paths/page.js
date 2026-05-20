@@ -161,3 +161,4 @@ export default function PathsPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

@@ -47,7 +47,7 @@ export default function HomePage() {
         <div className="space-y-4">
           {/* Start a Path (ВЕДЁТ НА СОЗДАНИЕ) */}
           <button
-            onClick={() => router.push('/path')} // 👈 Изменено с '/paths' на '/path'
+            onClick={() => router.push('/path')} 
             className={`w-full group relative overflow-hidden rounded-2xl border p-6 transition-all hover:scale-[1.02] active:scale-[0.98] ${
               isDark 
                 ? 'bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border-blue-500/30 hover:border-blue-400/50 hover:from-blue-600/30 hover:to-cyan-600/30' 
@@ -93,3 +93,4 @@ export default function HomePage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

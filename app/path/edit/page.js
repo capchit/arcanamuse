@@ -117,3 +117,4 @@ export default function EditPathPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

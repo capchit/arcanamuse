@@ -169,3 +169,4 @@ export default function ManualPathPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'
