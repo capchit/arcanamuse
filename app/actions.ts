@@ -2,15 +2,13 @@
 'use server'
 import { aiClient, modelName } from '@/lib/ai/client'
 import { isUnexpected } from '@azure-rest/ai-inference'
-import { supabase } from '@/lib/db'  // 👈 Только supabase отсюда
-import { generatePath, generateInspiration } from '@/lib/ai/generate'  // 👈 AI-функции отсюда
+import { supabase } from '@/lib/db'
+import { generatePath, generateInspiration } from '@/lib/ai/generate'
 import { revalidatePath } from 'next/cache'
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
-// Пересчёт статов пользователя (после завершения/удаления квеста)
 async function recalculateUserStats(userId: string) {
-  // 1. Получаем все выполненные квесты пользователя
   const { data: quests, error } = await supabase
     .from('quests')
     .select('stat_bonus, paths!inner(user_id)')
@@ -19,7 +17,6 @@ async function recalculateUserStats(userId: string) {
 
   if (error) { console.error('❌ Ошибка получения квестов:', error); return }
 
-  // 2. Суммируем бонусы
   const totals: Record<string, number> = {}
   for (const q of quests || []) {
     try {
@@ -32,7 +29,6 @@ async function recalculateUserStats(userId: string) {
     } catch (e) { console.warn('⚠️ Ошибка парсинга статов:', e) }
   }
 
-  // 3. Удаляем старые статы и записываем новые
   await supabase.from('user_stats').delete().eq('user_id', userId)
   
   if (Object.keys(totals).length > 0) {
@@ -41,20 +37,17 @@ async function recalculateUserStats(userId: string) {
   }
 }
 
-// === АВТОРИЗАЦИЯ (через Supabase Auth) ===
+// === АВТОРИЗАЦИЯ ===
 
 export async function handleRegister(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password })
   if (error) return { success: false, error: error.message }
-  
-  // Профиль создастся автоматически через триггер в БД
   return { success: true, user: data.user ? { id: data.user.id, email: data.user.email } : null }
 }
 
 export async function handleLogin(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { success: false, error: error.message }
-  
   return { success: true, user: data.user ? { id: data.user.id, email: data.user.email } : null }
 }
 
@@ -74,21 +67,14 @@ export async function createNewPath(userId: string, goal: string) {
   try {
     const aiData = await generatePath(goal)
     
-    // Создаём путь
     const { data: path, error: pathError } = await supabase
       .from('paths')
-      .insert({ 
-        user_id: userId, 
-        title: goal, 
-        archetype: aiData.archetype, 
-        archetype_meaning: aiData.archetype_meaning 
-      })
+      .insert({ user_id: userId, title: goal, archetype: aiData.archetype, archetype_meaning: aiData.archetype_meaning })
       .select()
       .single()
     
     if (pathError) throw pathError
 
-    // Создаём квесты
     const questsToInsert = (aiData.stages || []).map((s: any, i: number) => ({
       path_id: path.id,
       title: s.title,
@@ -142,7 +128,6 @@ export async function createManualPath(userId: string, title: string, archetype:
 
 export async function finishQuest(questId: string) {
   try {
-    // Получаем квест с данными пути
     const { data: quest, error: questError } = await supabase
       .from('quests')
       .select('*, paths(user_id)')
@@ -151,7 +136,6 @@ export async function finishQuest(questId: string) {
     
     if (questError || !quest) throw new Error('Квест не найден')
 
-    // Обновляем статус квеста
     const { error: updateError } = await supabase
       .from('quests')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
@@ -159,7 +143,6 @@ export async function finishQuest(questId: string) {
     
     if (updateError) throw updateError
 
-    // Добавляем бонусы к статам
     const bonuses = typeof quest.stat_bonus === 'string' ? JSON.parse(quest.stat_bonus) : quest.stat_bonus
     const statsToUpsert = Object.entries(bonuses || {}).map(([stat, val]: [string, any]) => ({
       user_id: quest.paths.user_id,
@@ -191,10 +174,7 @@ export async function uncompleteQuest(questId: string) {
     
     if (questError || !quest || quest.status !== 'completed') return { success: true }
 
-    // Отменяем статус
     await supabase.from('quests').update({ status: 'pending', completed_at: null }).eq('id', questId)
-
-    // Вычитаем бонусы (пересчитываем всё заново для надёжности)
     await recalculateUserStats(quest.paths.user_id)
 
     revalidatePath('/my-path')
@@ -210,7 +190,6 @@ export async function deleteQuest(questId: string) {
     const { data: quest, error } = await supabase.from('quests').select('*, paths(user_id)').eq('id', questId).single()
     if (error || !quest) return { success: false, error: 'Квест не найден' }
 
-    // Если квест был выполнен — пересчитаем статы после удаления
     if (quest.status === 'completed') {
       await supabase.from('quests').delete().eq('id', questId)
       await recalculateUserStats(quest.paths.user_id)
@@ -257,12 +236,8 @@ export async function getUserStats(userId: string) {
     .eq('user_id', userId)
     .gt('value', 0)
 
-  // 👇 Явно указываем тип для stats
   const typedStats = (stats || []) as Array<{ stat_name: string; value: number }>
-  
   const statsObj = Object.fromEntries(typedStats.map(s => [s.stat_name, s.value]))
-  
-  // 👇 Приводим значения к number для reduce
   const totalPoints = Object.values(statsObj).reduce((a: number, b: any) => a + (typeof b === 'number' ? b : 0), 0)
   const level = Math.floor(totalPoints / 10) + 1
   const progress = totalPoints % 10
@@ -345,10 +320,7 @@ export async function getInspirationById(id: string) {
 export async function getUserPaths(userId: string) {
   const { data } = await supabase
     .from('paths')
-    .select(`
-      id, title, archetype, status, created_at,
-      quests!left(status)
-    `)
+    .select(`id, title, archetype, status, created_at, quests!left(status)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
 
@@ -373,20 +345,15 @@ export async function togglePathStatus(pathId: string, newStatus: 'active' | 'pa
 
 export async function finishPath(pathId: string) {
   try {
-    // Получаем user_id пути
     const { data: path } = await supabase.from('paths').select('user_id').eq('id', pathId).single()
     if (!path) return { success: false, error: 'Путь не найден' }
 
-    // Завершаем все квесты
     await supabase.from('quests')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('path_id', pathId)
       .neq('status', 'completed')
 
-    // Меняем статус пути
     await supabase.from('paths').update({ status: 'completed' }).eq('id', pathId)
-
-    // Пересчитываем статы
     await recalculateUserStats(path.user_id)
 
     revalidatePath('/paths')
@@ -417,12 +384,8 @@ export async function deletePath(pathId: string) {
     const { data: path } = await supabase.from('paths').select('user_id').eq('id', pathId).single()
     if (!path) return { success: false, error: 'Путь не найден' }
 
-    // Удаляем квесты (CASCADE может не сработать, удаляем явно)
     await supabase.from('quests').delete().eq('path_id', pathId)
-    // Удаляем путь
     await supabase.from('paths').delete().eq('id', pathId)
-
-    // Пересчитываем статы
     await recalculateUserStats(path.user_id)
 
     revalidatePath('/profile')
@@ -495,7 +458,7 @@ export async function getPathById(pathId: string) {
 
 export async function resetUserProgress(userId: string) {
   try {
-    await supabase.from('quests').delete().match({ user_id: userId }) // через paths
+    await supabase.from('quests').delete().match({ user_id: userId })
     await supabase.from('paths').delete().eq('user_id', userId)
     await supabase.from('inspiration_history').delete().eq('user_id', userId)
     await supabase.from('user_stats').delete().eq('user_id', userId)
@@ -533,7 +496,6 @@ export async function deleteInspiration(id: string) {
 // === УМНОЕ СОЗДАНИЕ ВРУЧНУЮ ===
 export async function createSmartManualPath(userId: string, title: string, quests: any[]) {
   try {
-    // Генерируем архетип через ИИ
     const prompt = `Путь: "${title}". Квесты: ${quests.map((q:any) => q.title).join(', ')}. Придумай архетип (1-2 слова) и значение (1 предложение). Верни ТОЛЬКО JSON: {"archetype": "...", "meaning": "..."}`
     
     let archetype = "Созидатель", meaning = "Твой уникальный путь к цели."
@@ -552,7 +514,6 @@ export async function createSmartManualPath(userId: string, title: string, quest
       }
     } catch (e) { console.warn('⚠️ ИИ для архетипа не ответил') }
 
-    // Создаём путь
     const { data: path, error: pathError } = await supabase
       .from('paths')
       .insert({ user_id: userId, title, archetype, archetype_meaning: meaning })
@@ -560,7 +521,6 @@ export async function createSmartManualPath(userId: string, title: string, quest
       .single()
     if (pathError) throw pathError
 
-    // Создаём квесты
     const questsToInsert = quests.map((q: any, i: number) => ({
       path_id: path.id,
       title: q.title,
