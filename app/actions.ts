@@ -40,27 +40,34 @@ async function recalculateUserStats(userId: string) {
 // === АВТОРИЗАЦИЯ ===
 
 export async function handleRegister(email: string, password: string) {
+  'use server'
+  
+  console.log('🔐 [SERVER] handleRegister called for:', email)
+  
   try {
-    // 1. Регистрируем пользователя в Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({ 
       email, 
       password,
       options: {
-        // Автоматически подтверждаем email (для тестов)
         emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
       }
     })
     
     if (authError) {
-      console.error('Auth error:', authError)
+      console.error('❌ [SERVER] Supabase signUp error:', authError)
+      
+      if (authError.message?.includes('User already registered')) {
+        return { success: false, error: 'Этот email уже занят' }
+      }
       return { success: false, error: authError.message }
     }
     
-    if (!authData.user) {
+    if (!authData?.user) {
+      console.error('❌ [SERVER] No user created in signUp')
       return { success: false, error: 'Пользователь не создан' }
     }
 
-    // 2. Создаём профиль вручную (на случай, если триггер не сработал)
+    // Создаём профиль вручную (на случай, если триггер не сработал)
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({ 
@@ -69,24 +76,94 @@ export async function handleRegister(email: string, password: string) {
       })
     
     if (profileError) {
-      console.error('Profile creation error:', profileError)
-      // Не блокируем регистрацию, если профиль не создался (триггер сделает это)
+      console.warn('⚠️ [SERVER] Profile creation warning:', profileError)
+      // Не блокируем регистрацию — триггер может создать профиль позже
     }
 
+    console.log('✅ [SERVER] Registration successful:', authData.user.email)
+    
     return { 
       success: true, 
       user: { id: authData.user.id, email: authData.user.email } 
     }
   } catch (e: any) {
-    console.error('Registration error:', e)
+    console.error('💥 [SERVER] Exception in handleRegister:', e)
     return { success: false, error: e.message || 'Ошибка регистрации' }
   }
 }
 
+
 export async function handleLogin(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) return { success: false, error: error.message }
-  return { success: true, user: data.user ? { id: data.user.id, email: data.user.email } : null }
+  'use server'
+  
+  console.log('🔐 [SERVER] handleLogin called for:', email)
+  
+  try {
+    // 1. Проверяем переменные окружения
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    
+    if (!url || !key) {
+      console.error('❌ [SERVER] Missing Supabase env vars!')
+      console.error('URL:', url ? 'exists' : 'MISSING')
+      console.error('Key:', key ? 'exists' : 'MISSING')
+      return { success: false, error: 'Server configuration error' }
+    }
+
+    // 2. Выполняем вход через Supabase Auth
+    console.log('📡 [SERVER] Calling supabase.auth.signInWithPassword...')
+    
+    const { data, error } = await supabase.auth.signInWithPassword({ 
+      email, 
+      password 
+    })
+    
+    if (error) {
+      console.error('❌ [SERVER] Supabase auth error:', {
+        message: error.message,
+        status: error.status,
+        code: error.code
+      })
+      
+      // Дружелюбные сообщения для пользователя
+      if (error.message?.includes('Invalid login credentials')) {
+        return { success: false, error: 'Неверный email или пароль' }
+      }
+      if (error.message?.includes('Email not confirmed')) {
+        return { success: false, error: 'Подтвердите email перед входом' }
+      }
+      
+      return { success: false, error: error.message }
+    }
+    
+    if (!data?.user) {
+      console.error('❌ [SERVER] No user in auth response')
+      return { success: false, error: 'Authentication failed' }
+    }
+    
+    console.log('✅ [SERVER] Login successful for:', data.user.email, 'UID:', data.user.id)
+    
+    // 3. Возвращаем данные пользователя (без чувствительной информации)
+    return { 
+      success: true, 
+      user: { 
+        id: data.user.id, 
+        email: data.user.email 
+      } 
+    }
+    
+  } catch (e: any) {
+    console.error('💥 [SERVER] Exception in handleLogin:', {
+      message: e.message,
+      stack: e.stack,
+      name: e.name
+    })
+    
+    return { 
+      success: false, 
+      error: e.message || 'Internal server error' 
+    }
+  }
 }
 
 export async function handleLogout() {
