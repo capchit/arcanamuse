@@ -16,23 +16,54 @@ export default function GenerateInspirationPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const handleGenerate = async () => {
-    setLoading(true)
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (!userId) { router.push('/login'); return }
-
-    // ✅ ИСПРАВЛЕНО: Вызываем generateInspirationAction
+ const handleGenerate = async () => {
+  setLoading(true)
+  
+  try {
+    // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH (не из localStorage!)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error('❌ Auth error:', authError)
+      alert('❌ Сначала войдите в систему!')
+      router.push('/login')
+      setLoading(false)
+      return
+    }
+    
+    const userId = user.id  // 👈 Это UUID строка: "a1b2c3d4-..."
+    console.log('🎴 Генерация для userId:', userId)
+    
+    // 1. Генерируем карту
     const result = await generateInspirationAction(userId)
     
-    if (result.success) {
-      setCard(result.card)
-      // Сохраняем в историю (убедись, что эта функция есть в actions.ts)
-      await saveInspirationToHistory(userId, result.card)
-    } else {
+    if (!result.success) {
       alert('Ошибка генерации: ' + result.error)
+      setLoading(false)
+      return
     }
+    
+    console.log('✅ Карта сгенерирована:', result.card)
+    setCard(result.card)
+    
+    // 2. Сохраняем в историю
+    console.log('💾 Сохранение в историю...')
+    const saveResult = await saveInspirationToHistory(userId, result.card)
+    
+    if (saveResult.success) {
+      console.log('✅ Вдохновение сохранено!')
+    } else {
+      console.error('❌ Ошибка сохранения:', saveResult.error)
+      // Не блокируем пользователя, если сохранение не удалось
+    }
+    
+  } catch (err) {
+    console.error('💥 Ошибка в handleGenerate:', err)
+    alert('Произошла ошибка: ' + err.message)
+  } finally {
     setLoading(false)
   }
+}
 
   const handleDownload = async () => {
     const node = document.getElementById('inspiration-card')
