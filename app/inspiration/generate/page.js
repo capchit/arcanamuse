@@ -7,6 +7,7 @@ import { generateInspirationAction, saveInspirationToHistory } from '@/app/actio
 import { useTheme } from '@/lib/useTheme'
 import { Sparkles, ArrowLeft, Download } from 'lucide-react'
 import { toPng } from 'html-to-image'
+import { supabase } from '@/lib/db'
 
 export default function GenerateInspirationPage() {
   const [loading, setLoading] = useState(false)
