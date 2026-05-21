@@ -2,7 +2,6 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { handleRegister, handleLogin } from '@/app/actions'
 import { supabase } from '@/lib/db'
 
 export default function LoginPage() {
@@ -19,51 +18,56 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const result = isSignUp
-        ? await handleRegister(email, password)
-        : await handleLogin(email, password)
-
-      if (result.success) {
-        if (isSignUp) {
-          alert('✅ Регистрация успешна! Теперь войдите.')
-          setIsSignUp(false)
-        } else {
-          console.log('⏳ Waiting for session sync...')
-          
-          // Ждём чтобы куки записались
-          await new Promise(resolve => setTimeout(resolve, 500))
-          
-          // Принудительно читаем сессию
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-          
-          if (sessionError) {
-            console.error('❌ Session error:', sessionError)
-          }
-          
-          if (session) {
-            console.log('✅ Session found:', session.user.email)
-            console.log('🔑 Access token:', session.access_token.substring(0, 20) + '...')
-            
-            // Обновляем состояние клиента
-            await supabase.auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token
-            })
-            
-            // Редирект
-            router.push('/')
-            router.refresh()
-          } else {
-            console.error('❌ No session after login!')
-            setError('Не удалось создать сессию. Попробуйте ещё раз.')
-          }
-        }
+      if (isSignUp) {
+        // РЕГИСТРАЦИЯ
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        })
+        
+        if (error) throw error
+        
+        alert('✅ Регистрация успешна! Теперь войдите.')
+        setIsSignUp(false)
       } else {
-        setError(result.error || 'Неверный email или пароль')
+        // ВХОД
+        console.log('🔐 Attempting login for:', email)
+        
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        
+        if (error) {
+          console.error('❌ Login error:', error.message)
+          throw error
+        }
+        
+        console.log('✅ Login successful:', data.user?.email)
+        console.log('🔑 Session:', data.session ? 'ACTIVE' : 'NONE')
+        
+        if (!data.session) {
+          throw new Error('Session not created')
+        }
+        
+        // Ждём чтобы куки записались
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Проверяем сессию
+        const { data: { session } } = await supabase.auth.getSession()
+        console.log('📋 Session check:', session ? 'FOUND' : 'NOT FOUND')
+        
+        if (session) {
+          console.log(' Redirecting to home...')
+          router.push('/')
+          router.refresh()
+        } else {
+          throw new Error('Session not found after login')
+        }
       }
     } catch (err) {
-      console.error('💥 Auth exception:', err)
-      setError('Произошла ошибка: ' + err.message)
+      console.error('💥 Auth error:', err)
+      setError(err.message || 'Произошла ошибка')
     } finally {
       setLoading(false)
     }
