@@ -28,25 +28,41 @@ export default function LoginPage() {
           alert('✅ Регистрация успешна! Теперь войдите.')
           setIsSignUp(false)
         } else {
-          // ⏳ Ждём 300мс, чтобы кука сессии успела записаться в браузер
-          await new Promise(resolve => setTimeout(resolve, 300))
-
-          // Проверяем, что клиентский Supabase увидел сессию
-          const { data: { session } } = await supabase.auth.getSession()
+          console.log('⏳ Waiting for session sync...')
+          
+          // Ждём чтобы куки записались
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
+          // Принудительно читаем сессию
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          
+          if (sessionError) {
+            console.error('❌ Session error:', sessionError)
+          }
           
           if (session) {
-            console.log('✅ Сессия активна, перенаправляем на главную...')
+            console.log('✅ Session found:', session.user.email)
+            console.log('🔑 Access token:', session.access_token.substring(0, 20) + '...')
+            
+            // Обновляем состояние клиента
+            await supabase.auth.setSession({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token
+            })
+            
+            // Редирект
             router.push('/')
+            router.refresh()
           } else {
-            // 🔑 Fallback: если кука не применилась асинхронно, делаем жёсткий редирект
-            console.warn('⚠️ Кука не применена, используем window.location')
-            window.location.href = '/'
+            console.error('❌ No session after login!')
+            setError('Не удалось создать сессию. Попробуйте ещё раз.')
           }
         }
       } else {
         setError(result.error || 'Неверный email или пароль')
       }
     } catch (err) {
+      console.error('💥 Auth exception:', err)
       setError('Произошла ошибка: ' + err.message)
     } finally {
       setLoading(false)

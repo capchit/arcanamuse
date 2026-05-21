@@ -96,73 +96,30 @@ export async function handleRegister(email: string, password: string) {
 export async function handleLogin(email: string, password: string) {
   'use server'
   
-  console.log('🔐 [SERVER] handleLogin called for:', email)
+  const { data, error } = await supabase.auth.signInWithPassword({ 
+    email, 
+    password 
+  })
   
-  try {
-    // 1. Проверяем переменные окружения
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    
-    if (!url || !key) {
-      console.error('❌ [SERVER] Missing Supabase env vars!')
-      console.error('URL:', url ? 'exists' : 'MISSING')
-      console.error('Key:', key ? 'exists' : 'MISSING')
-      return { success: false, error: 'Server configuration error' }
-    }
-
-    // 2. Выполняем вход через Supabase Auth
-    console.log('📡 [SERVER] Calling supabase.auth.signInWithPassword...')
-    
-    const { data, error } = await supabase.auth.signInWithPassword({ 
-      email, 
-      password 
-    })
-    
-    if (error) {
-      console.error('❌ [SERVER] Supabase auth error:', {
-        message: error.message,
-        status: error.status,
-        code: error.code
-      })
-      
-      // Дружелюбные сообщения для пользователя
-      if (error.message?.includes('Invalid login credentials')) {
-        return { success: false, error: 'Неверный email или пароль' }
-      }
-      if (error.message?.includes('Email not confirmed')) {
-        return { success: false, error: 'Подтвердите email перед входом' }
-      }
-      
-      return { success: false, error: error.message }
-    }
-    
-    if (!data?.user) {
-      console.error('❌ [SERVER] No user in auth response')
-      return { success: false, error: 'Authentication failed' }
-    }
-    
-    console.log('✅ [SERVER] Login successful for:', data.user.email, 'UID:', data.user.id)
-    
-    // 3. Возвращаем данные пользователя (без чувствительной информации)
-    return { 
-      success: true, 
-      user: { 
-        id: data.user.id, 
-        email: data.user.email 
-      } 
-    }
-    
-  } catch (e: any) {
-    console.error('💥 [SERVER] Exception in handleLogin:', {
-      message: e.message,
-      stack: e.stack,
-      name: e.name
-    })
-    
-    return { 
-      success: false, 
-      error: e.message || 'Internal server error' 
-    }
+  if (error) {
+    console.error('❌ [SERVER] Login error:', error.message)
+    return { success: false, error: error.message }
+  }
+  
+  if (!data?.user) {
+    console.error('❌ [SERVER] No user in response')
+    return { success: false, error: 'Authentication failed' }
+  }
+  
+  console.log('✅ [SERVER] Login successful for:', data.user.email)
+  console.log('🔑 [SERVER] Session created, has session:', !!data.session)
+  
+  return { 
+    success: true, 
+    user: { 
+      id: data.user.id, 
+      email: data.user.email 
+    } 
   }
 }
 
