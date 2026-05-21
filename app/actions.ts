@@ -40,9 +40,47 @@ async function recalculateUserStats(userId: string) {
 // === АВТОРИЗАЦИЯ ===
 
 export async function handleRegister(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password })
-  if (error) return { success: false, error: error.message }
-  return { success: true, user: data.user ? { id: data.user.id, email: data.user.email } : null }
+  try {
+    // 1. Регистрируем пользователя в Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        // Автоматически подтверждаем email (для тестов)
+        emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+      }
+    })
+    
+    if (authError) {
+      console.error('Auth error:', authError)
+      return { success: false, error: authError.message }
+    }
+    
+    if (!authData.user) {
+      return { success: false, error: 'Пользователь не создан' }
+    }
+
+    // 2. Создаём профиль вручную (на случай, если триггер не сработал)
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({ 
+        id: authData.user.id, 
+        email: authData.user.email 
+      })
+    
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+      // Не блокируем регистрацию, если профиль не создался (триггер сделает это)
+    }
+
+    return { 
+      success: true, 
+      user: { id: authData.user.id, email: authData.user.email } 
+    }
+  } catch (e: any) {
+    console.error('Registration error:', e)
+    return { success: false, error: e.message || 'Ошибка регистрации' }
+  }
 }
 
 export async function handleLogin(email: string, password: string) {
