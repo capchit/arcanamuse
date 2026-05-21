@@ -1,11 +1,12 @@
 // app/path/edit/page.js
-'use client'  // 👈 ОБЯЗАТЕЛЬНО: первая строка!
+'use client'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { getPathById, updatePathFull, enhanceQuestWithAI } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { ArrowLeft, Loader2, Plus, Trash2, Wand2, Save } from 'lucide-react'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 // 👇 Внутренний компонент, который использует useSearchParams
 function EditPathContent() {
@@ -22,24 +23,44 @@ function EditPathContent() {
   const [enhancingIdx, setEnhancingIdx] = useState(null)
 
   useEffect(() => {
-    const uid = parseInt(localStorage.getItem('userId'))
-    if (uid && pathId) loadPath(uid, pathId)
+    if (pathId) loadPath(pathId)  // 👈 Не передаём uid, получаем внутри
   }, [pathId])
 
-  const loadPath = async (uid, pid) => {
+  const loadPath = async (pid) => {
     setLoading(true)
     try {
+      // 👇 Проверяем аутентификацию
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован')
+        router.push('/login')
+        return
+      }
+      
       const data = await getPathById(pid)
+      
+      // 👇 Дополнительно: проверяем, что путь принадлежит этому пользователю
+      if (data && data.user_id !== user.id) {
+        console.warn('⚠️ Попытка доступа к чужому пути')
+        router.push('/my-path')
+        return
+      }
+      
       if (data) {
         setTitle(data.title)
         setQuests(data.quests.map(q => ({
           id: q.id,
           title: q.title,
           description: q.description,
-          stat_bonus: JSON.parse(q.stat_bonus || '{}')
+          stat_bonus: typeof q.stat_bonus === 'string' ? JSON.parse(q.stat_bonus || '{}') : q.stat_bonus || {}
         })))
       }
-    } finally { setLoading(false) }
+    } catch (e) {
+      console.error('❌ Ошибка загрузки пути:', e)
+    } finally { 
+      setLoading(false) 
+    }
   }
 
   const enhanceQuest = async (idx) => {
@@ -49,7 +70,7 @@ function EditPathContent() {
       const res = await enhanceQuestWithAI(quests[idx].title)
       const newQuests = [...quests]
       newQuests[idx].description = res.description
-      newQuests[idx].stat_bonus = res.stat_bonus
+      newQuests[idx].stat_bonus = res.stat_bonus || {}
       setQuests(newQuests)
     } finally { setEnhancingIdx(null) }
   }
@@ -61,8 +82,15 @@ function EditPathContent() {
     setSaving(true)
     try {
       const res = await updatePathFull(pathId, title, quests)
-      if (res.success) router.push(`/my-path?pathId=${pathId}`)
-      else alert('Ошибка сохранения: ' + res.error)
+      if (res.success) {
+        router.push(`/my-path?pathId=${pathId}`)
+        router.refresh()
+      } else {
+        alert('Ошибка сохранения: ' + res.error)
+      }
+    } catch (e) {
+      console.error('❌ Ошибка сохранения:', e)
+      alert('Ошибка: ' + e.message)
     } finally { setSaving(false) }
   }
 
@@ -122,7 +150,6 @@ function EditPathContent() {
 
 // 👇 Обёртка с Suspense для useSearchParams
 export default function EditPathPage() {
-  // Защита от SSR
   if (typeof window === 'undefined') return null
 
   return (
@@ -136,5 +163,4 @@ export default function EditPathPage() {
   )
 }
 
-// 👈 ОБЯЗАТЕЛЬНО: последняя строка файла!
 export const dynamic = 'force-dynamic'

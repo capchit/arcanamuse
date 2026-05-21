@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from '@/lib/useTheme'
 import { getUserPaths, deletePath, togglePathStatus, restorePath } from '@/app/actions'
 import { Compass, Trophy, Trash2, Play, Pause, CheckCircle, RotateCcw } from 'lucide-react'
-
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function PathsPage() {
   const [paths, setPaths] = useState([])
@@ -14,31 +14,66 @@ export default function PathsPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  useEffect(() => { loadPaths() }, [])
+  useEffect(() => { 
+    loadPaths() 
+  }, [])
 
   const loadPaths = async () => {
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (!userId) return
-    const data = await getUserPaths(userId)
-    setPaths(data || [])
-    setLoading(false)
+    try {
+      // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован')
+        router.push('/login')
+        return
+      }
+      
+      const userId = user.id  // 👈 UUID строка
+      console.log('🗺️ Загрузка путей для userId:', userId)
+      
+      const data = await getUserPaths(userId)
+      setPaths(data || [])
+    } catch (err) {
+      console.error('❌ Ошибка загрузки путей:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleDeletePath = async (e, pathId) => {
-    e.stopPropagation() // Не открываем путь при клике на корзину
+    e.stopPropagation()
     if (confirm('Удалить этот путь и всю его историю? Очки будут откатываться.')) {
-      await deletePath(pathId)
-      loadPaths()
+      try {
+        await deletePath(pathId)
+        loadPaths()  // Перезагружаем список
+      } catch (err) {
+        console.error('❌ Ошибка удаления пути:', err)
+        alert('Не удалось удалить путь')
+      }
     }
   }
+  
   const handleRestorePath = async (e, pathId) => {
     e.stopPropagation()
     if (confirm('♻️ Вернуть этот путь в активные?\nКвесты останутся выполненными, но путь снова станет доступным.')) {
-      await restorePath(pathId)
-      loadPaths()
+      try {
+        await restorePath(pathId)
+        loadPaths()
+      } catch (err) {
+        console.error('❌ Ошибка восстановления пути:', err)
+        alert('Не удалось восстановить путь')
+      }
     }
   }
-  if (loading) return <div className="flex justify-center p-10 text-gray-500">Загрузка путей...</div>
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" />
+      </div>
+    )
+  }
 
   const activePaths = paths.filter(p => p.status !== 'completed')
   const completedPaths = paths.filter(p => p.status === 'completed')
@@ -99,12 +134,12 @@ export default function PathsPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs text-gray-500">
                       <span>Прогресс</span>
-                      <span>{p.completed_count}/{p.total_count} ({Math.round((p.completed_count/p.total_count)*100)}%)</span>
+                      <span>{p.completed_count || 0}/{p.total_count || 0} ({p.total_count > 0 ? Math.round((p.completed_count/p.total_count)*100) : 0}%)</span>
                     </div>
                     <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-200'}`}>
                       <div 
                         className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(p.completed_count/p.total_count)*100}%` }}
+                        style={{ width: `${p.total_count > 0 ? (p.completed_count/p.total_count)*100 : 0}%` }}
                       />
                     </div>
                   </div>
@@ -114,7 +149,7 @@ export default function PathsPage() {
           )}
         </div>
 
-                {/* История (Завершенные) */}
+        {/* История (Завершенные) */}
         {completedPaths.length > 0 && (
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wider mb-4 text-yellow-500 flex items-center gap-2">

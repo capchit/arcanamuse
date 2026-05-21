@@ -1,7 +1,9 @@
+// app/login/page.js
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { handleRegister, handleLogin } from '@/app/actions'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -16,23 +18,35 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const result = isSignUp 
-      ? await handleRegister(email, password)
-      : await handleLogin(email, password)
-      
-    if (result.success) {
-      if (!isSignUp) {
-        localStorage.setItem('userId', result.user.id)
-        localStorage.setItem('userEmail', result.user.email)
-        router.push('/')
+    try {
+      const result = isSignUp 
+        ? await handleRegister(email, password)
+        : await handleLogin(email, password)
+        
+      if (result.success) {
+        if (isSignUp) {
+          // После регистрации просто переключаемся на вход
+          alert('✅ Регистрация успешна! Теперь войдите.')
+          setIsSignUp(false)
+        } else {
+          // 👇 ПРИ ВХОДЕ: не сохраняем ничего в localStorage!
+          // Supabase сам создал сессию через cookie
+          
+          console.log('✅ Вход успешен, сессия создана')
+          
+          // 👇 Обновляем роутер, чтобы он "увидел" новую сессию
+          router.push('/')
+          router.refresh()  // 👈 ОБЯЗАТЕЛЬНО!
+        }
       } else {
-        alert('Регистрация успешна! Теперь войдите.')
-        setIsSignUp(false)
+        setError(result.error || 'Произошла ошибка')
       }
-    } else {
-      setError(result.error)
+    } catch (err) {
+      console.error('💥 Ошибка аутентификации:', err)
+      setError('Произошла ошибка: ' + err.message)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (

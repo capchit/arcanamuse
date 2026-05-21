@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createNewPath, createSmartManualPath, enhanceQuestWithAI } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { ArrowLeft, Sparkles, Pencil, Plus, Trash2 } from 'lucide-react'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function CreatePathPage() {
   const [mode, setMode] = useState('ai')
@@ -21,6 +22,16 @@ export default function CreatePathPage() {
   const router = useRouter()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+
+  // 👇 Вспомогательная функция для получения userId
+  const getUserId = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) {
+      router.push('/login')
+      return null
+    }
+    return user.id  // UUID строка
+  }
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const removeQuest = (idx) => setQuests(quests.filter((_, i) => i !== idx))
@@ -45,29 +56,53 @@ export default function CreatePathPage() {
   const handleCreateAI = async () => {
     if (!goal.trim()) return
     setLoading(true)
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (!userId) { router.push('/login'); return }
+    
+    const userId = await getUserId()
+    if (!userId) { setLoading(false); return }
+    
     try {
       const res = await createNewPath(userId, goal.trim())
-      if (res.success && res.pathId) router.push(`/my-path?pathId=${res.pathId}`)
-    } catch (e) { alert('Ошибка: ' + e.message) }
-    finally { setLoading(false) }
+      if (res.success && res.pathId) {
+        router.push(`/my-path?pathId=${res.pathId}`)
+        router.refresh()
+      } else {
+        alert('Ошибка: ' + res.error)
+      }
+    } catch (e) { 
+      console.error('❌ Ошибка создания пути с ИИ:', e)
+      alert('Ошибка: ' + e.message) 
+    } finally { 
+      setLoading(false) 
+    }
   }
 
   const handleCreateManual = async () => {
     if (!title.trim() || quests.some(q => !q.title.trim())) return
     setLoading(true)
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (!userId) { router.push('/login'); return }
+    
+    const userId = await getUserId()
+    if (!userId) { setLoading(false); return }
+    
     try {
       const res = await createSmartManualPath(userId, title, quests)
-      if (res.success && res.pathId) router.push(`/my-path?pathId=${res.pathId}`)
-    } catch (e) { alert('Ошибка: ' + e.message) }
-    finally { setLoading(false) }
+      if (res.success && res.pathId) {
+        router.push(`/my-path?pathId=${res.pathId}`)
+        router.refresh()
+      } else {
+        alert('Ошибка: ' + res.error)
+      }
+    } catch (e) { 
+      console.error('❌ Ошибка создания пути вручную:', e)
+      alert('Ошибка: ' + e.message) 
+    } finally { 
+      setLoading(false) 
+    }
   }
- if (typeof window === 'undefined') {
-    return null // или спиннер загрузки
+
+  if (typeof window === 'undefined') {
+    return null
   }
+  
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} p-4`}>
       <div className="max-w-md mx-auto space-y-6">
@@ -181,7 +216,7 @@ export default function CreatePathPage() {
               disabled={loading || !title.trim() || quests.some(q => !q.title.trim())}
               className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 hover:from-blue-600 hover:to-purple-700 transition-all"
             >
-              {loading ? 'Создание...' : ' Создать путь'}
+              {loading ? 'Создание...' : '🚀 Создать путь'}
             </button>
           </div>
         )}

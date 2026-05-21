@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getInspirationHistory, deleteInspiration } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { Sparkles, Eye, Trash2 } from 'lucide-react'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function InspirationPage() {
   const [cards, setCards] = useState([])
@@ -13,25 +14,53 @@ export default function InspirationPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  useEffect(() => { loadHistory() }, [])
+  useEffect(() => { 
+    loadHistory() 
+  }, [])
 
   const loadHistory = async () => {
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (!userId) return
-    const data = await getInspirationHistory(userId)
-    setCards(data || [])
-    setLoading(false)
+    try {
+      // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH (не из localStorage!)
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован, перенаправляем на вход')
+        router.push('/login')
+        return
+      }
+      
+      const userId = user.id  // 👈 UUID строка: "a1b2c3d4-..."
+      console.log('📚 Загрузка истории для userId:', userId)
+      
+      const data = await getInspirationHistory(userId)
+      setCards(data || [])
+    } catch (err) {
+      console.error('❌ Ошибка загрузки истории:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleDelete = async (e, id) => {
     e.stopPropagation()
     if (confirm('Удалить эту карту?')) {
-      await deleteInspiration(id)
-      loadHistory()
+      try {
+        await deleteInspiration(id)
+        loadHistory()  // Перезагружаем список
+      } catch (err) {
+        console.error('❌ Ошибка удаления:', err)
+        alert('Не удалось удалить карту')
+      }
     }
   }
 
-  if (loading) return <div className="flex justify-center p-10 text-gray-500">Загрузка...</div>
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" />
+      </div>
+    )
+  }
 
   return (
     <div className={`min-h-screen pb-24 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
@@ -68,7 +97,7 @@ export default function InspirationPage() {
                 {/* Кнопка удаления */}
                 <button
                   onClick={(e) => handleDelete(e, c.id)} 
-                  className="absolute top-3 right-3 p-2 rounded-full bg-red-500/10 text-red-400  hover:bg-red-500/20 z-10"
+                  className="absolute top-3 right-3 p-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 z-10"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -90,13 +119,11 @@ export default function InspirationPage() {
                       {new Date(c.created_at).toLocaleDateString('ru-RU')}
                     </p>
                     
-                    {/* Цитата с fallback */}
+                    {/* Цитата с безопасным парсингом */}
                     <p className={`text-sm italic line-clamp-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      "{c.quote || c.data ? (JSON.parse(c.data || '{}').quote || 'Нет цитаты') : 'Нет цитаты'}"
+                      "{c.quote || (c.data && typeof c.data === 'string' ? JSON.parse(c.data).quote : null) || 'Нет цитаты'}"
                     </p>
                   </div>
-
-                  
                 </div>
               </div>
             ))}
@@ -106,3 +133,4 @@ export default function InspirationPage() {
     </div>
   )
 }
+export const dynamic = 'force-dynamic'

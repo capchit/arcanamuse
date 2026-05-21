@@ -2,10 +2,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getUserStats, resetUserProgress } from '@/app/actions'
+import { getUserStats, resetUserProgress, handleLogout } from '@/app/actions'
 import { ArrowLeft, Settings, LogOut, Moon, Sun, Download, ImagePlus, Trash2, MessageSquare } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useTheme } from '@/lib/useTheme'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 const STAT_NAMES = { vision: 'Видение', craft: 'Мастерство', focus: 'Фокус', voice: 'Голос', resilience: 'Стойкость', insight: 'Озарение' }
 
@@ -57,6 +58,7 @@ export default function ProfilePage() {
   const [isCustomAvatar, setIsCustomAvatar] = useState(false)
 
   useEffect(() => {
+    // 👇 Аватар можно хранить в lS (это предпочтение пользователя)
     const savedAvatar = localStorage.getItem('avatar')
     if (savedAvatar) {
       if (savedAvatar.startsWith('data:')) {
@@ -67,23 +69,38 @@ export default function ProfilePage() {
         setIsCustomAvatar(false)
       }
     }
-    const userId = localStorage.getItem('userId')
-    if (!userId) { router.push('/login'); return }
-    loadProfile(parseInt(userId))
+    
+    // 👇 Но userId получаем из Supabase Auth!
+    loadProfile()
   }, [router])
 
-  const loadProfile = async (uid) => {
+  const loadProfile = async () => {
     try {
-      const statsData = await getUserStats(uid)
+      // 👇 Получаем текущего пользователя из Supabase
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован')
+        router.push('/login')
+        return
+      }
+      
+      const userId = user.id  // 👈 UUID строка
+      const statsData = await getUserStats(userId)
       setStats(statsData)
     } catch (e) {
-      console.error('Ошибка загрузки профиля:', e)
+      console.error('❌ Ошибка загрузки профиля:', e)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleLogout = () => { localStorage.removeItem('userId'); router.push('/') }
+  const handleLogout = async () => {
+    // 👇 Используем Supabase signOut (не lS!)
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
+  }
 
   const handleDownloadCard = async () => {
     const node = document.getElementById('hero-card-node')
@@ -105,17 +122,48 @@ export default function ProfilePage() {
         const base64 = reader.result
         setAvatar(base64)
         setIsCustomAvatar(true)
-        localStorage.setItem('avatar', base64)
+        localStorage.setItem('avatar', base64)  // 👈 Аватар можно хранить в localStorage
       }
       reader.readAsDataURL(file)
     }
   }
-   // Защита: рендерим только в браузере
-  if (typeof window === 'undefined') {
-    return null // или спиннер загрузки
+
+  const handleResetProgress = async () => {
+    if (!confirm('⚠️ Удалить ВСЕ данные? Это необратимо.')) return
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
+      await resetUserProgress(user.id)  // 👈 Передаём UUID
+      loadProfile()  // Перезагружаем профиль
+      alert('Прогресс сброшен! 🚀')
+    } catch (e) {
+      console.error('❌ Ошибка сброса:', e)
+      alert('Не удалось сбросить прогресс')
+    }
   }
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent"></div></div>
-  if (!stats) return <div className="min-h-screen flex items-center justify-center text-white">Ошибка загрузки</div>
+
+  // Защита: рендерим только в браузере
+  if (typeof window === 'undefined') {
+    return null
+  }
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent"></div>
+      </div>
+    )
+  }
+  
+  if (!stats) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Ошибка загрузки
+      </div>
+    )
+  }
 
   const progressPercent = (stats.progress / stats.nextLevelAt) * 100
   const bgClass = isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'
@@ -142,7 +190,7 @@ export default function ProfilePage() {
         {showSettings && (
           <div className={`${cardClass} backdrop-blur-xl border rounded-3xl p-6 space-y-5 animate-in fade-in slide-in-from-top-4`}>
             <div className="flex items-center justify-between">
-              <h2 className={`text-lg font-bold ${textPrimary}`}>️ Настройки</h2>
+              <h2 className={`text-lg font-bold ${textPrimary}`}>⚙️ Настройки</h2>
               <button onClick={toggleTheme} className={`p-2 rounded-xl ${isDark ? 'bg-white/5 text-yellow-400' : 'bg-gray-200 text-orange-500'}`}>
                 {isDark ? <Sun size={20} /> : <Moon size={20} />}
               </button>
@@ -156,13 +204,13 @@ export default function ProfilePage() {
                   <ImagePlus size={18} /> Загрузить
                   <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
                 </label>
-                <button onClick={() => { setAvatar(EMOJI_AVATARS[0]); setIsCustomAvatar(false); localStorage.setItem('avatar', EMOJI_AVATARS[0]); }} className="text-xs text-gray-500 underline">Сбросить</button>
+                <button onClick={() => { setAvatar(EMOJI_AVATARS[0]); setIsCustomAvatar(false); localStorage.setItem('avatar', EMOJI_AVATARS[0]) }} className="text-xs text-gray-500 underline">Сбросить</button>
               </div>
             </div>
             {!isCustomAvatar && (
               <div className="flex gap-2 flex-wrap">
                 {EMOJI_AVATARS.map(a => (
-                  <button key={a} onClick={() => { setAvatar(a); localStorage.setItem('avatar', a); }} className={`text-2xl p-1 rounded ${avatar === a ? 'bg-purple-500/30 border border-purple-500' : ''}`}>
+                  <button key={a} onClick={() => { setAvatar(a); localStorage.setItem('avatar', a) }} className={`text-2xl p-1 rounded ${avatar === a ? 'bg-purple-500/30 border border-purple-500' : ''}`}>
                     {a}
                   </button>
                 ))}
@@ -171,13 +219,7 @@ export default function ProfilePage() {
 
             {/* Сброс прогресса */}
             <button 
-              onClick={async () => { 
-                if(confirm('⚠️ Удалить ВСЕ данные? Это необратимо.')) {
-                  await resetUserProgress(parseInt(localStorage.getItem('userId')))
-                  loadProfile(parseInt(localStorage.getItem('userId')))
-                  alert('Прогресс сброшен! 🚀')
-                }
-              }} 
+              onClick={handleResetProgress} 
               className="w-full py-2 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-sm font-medium hover:bg-red-500/30 transition-all"
             >
               🔄 Сбросить весь прогресс

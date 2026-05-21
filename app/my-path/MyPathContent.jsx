@@ -1,34 +1,49 @@
 // app/my-path/page.js
-'use client'  // 👈 Обязательно в самой первой строке!
+'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { getUserActivePath, finishQuest, uncompleteQuest, finishPath, restorePath } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
-import { ArrowLeft, Trophy, CheckCircle2, Circle, Flame, Pencil, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Trophy, CheckCircle2, Circle, Flame, Pencil } from 'lucide-react'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function MyPathContent({ pathId }) {
   const router = useRouter()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const [path, setPath] = useState(null) // 👈 Здесь хранятся данные пути
+  const [path, setPath] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const userId = parseInt(localStorage.getItem('userId'))
-    if (userId && pathId) {
-      loadPath(userId, pathId)
-    }
+    loadPath()
   }, [pathId])
 
-  const loadPath = async (uid, pid) => {
+  const loadPath = async () => {
     setLoading(true)
     try {
-      const data = await getUserActivePath(uid, pid)
-      setPath(data)
+      // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован')
+        router.push('/login')
+        return
+      }
+      
+      const userId = user.id  // 👈 UUID строка
+      
+      if (!pathId) {
+        // Если pathId не передан, загружаем активный путь
+        const data = await getUserActivePath(userId)
+        setPath(data)
+      } else {
+        const data = await getUserActivePath(userId, pathId)
+        setPath(data)
+      }
     } catch (e) {
-      console.error('Ошибка загрузки пути:', e)
+      console.error('❌ Ошибка загрузки пути:', e)
     } finally {
       setLoading(false)
     }
@@ -42,10 +57,10 @@ export default function MyPathContent({ pathId }) {
         await finishQuest(questId)
       }
       // Перезагружаем данные пути
-      const userId = parseInt(localStorage.getItem('userId'))
-      loadPath(userId, pathId)
+      loadPath()
     } catch (e) {
-      console.error(e)
+      console.error('❌ Ошибка обновления квеста:', e)
+      alert('Не удалось обновить квест')
     }
   }
 
@@ -54,23 +69,44 @@ export default function MyPathContent({ pathId }) {
     
     try {
       await finishPath(path.id)
-      router.push('/paths') // Возвращаемся к списку
+      router.push('/paths')
+      router.refresh()
     } catch (e) {
+      console.error('❌ Ошибка завершения пути:', e)
       alert('Ошибка завершения пути')
     }
   }
-  if (typeof window === 'undefined') {
-      return null // или спиннер загрузки
-    }
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Загрузка пути...</div>
-    if (!path) return <div className="min-h-screen flex items-center justify-center text-gray-500">Путь не найден</div>
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" />
+      </div>
+    )
+  }
+  
+  if (!path) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+        <p className="mb-4">Путь не найден</p>
+        <button 
+          onClick={() => router.push('/path')}
+          className="px-4 py-2 rounded-xl bg-purple-500 text-white hover:bg-purple-600"
+        >
+          Создать новый путь
+        </button>
+      </div>
+    )
+  }
 
   // Подсчет прогресса
-  const total = path.quests.length
-  const completed = path.quests.filter(q => q.status === 'completed').length
+  const total = path.quests?.length || 0
+  const completed = path.quests?.filter(q => q.status === 'completed').length || 0
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0
-  
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} pb-24`}>
@@ -83,7 +119,7 @@ export default function MyPathContent({ pathId }) {
           </button>
           <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Мой Путь</h1>
           <div className="w-10" />
-          {/* 👇 Кнопка редактирования */}
+          {/* Кнопка редактирования */}
           <button 
             onClick={() => router.push(`/path/edit?pathId=${path.id}`)}
             className={`p-2 rounded-xl ${isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600'}`}
@@ -107,8 +143,7 @@ export default function MyPathContent({ pathId }) {
             </div>
           </div>
 
-          {/* Кнопка завершения пути (появляется только после загрузки данных) */}
-          {path && path.status !== 'completed' && (
+          {path.status !== 'completed' && (
             <button
               onClick={handleFinishPath}
               className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all mt-2 ${
@@ -128,7 +163,7 @@ export default function MyPathContent({ pathId }) {
         </h3>
 
         <div className="space-y-4">
-          {path.quests.map((quest, idx) => {
+          {(path.quests || []).map((quest, idx) => {
             const isDone = quest.status === 'completed'
             return (
               <div 
@@ -153,8 +188,8 @@ export default function MyPathContent({ pathId }) {
                         Квест #{idx + 1}
                       </span>
                       {/* Статы квеста */}
-                      <div className="flex gap-1.5">
-                        {Object.entries(JSON.parse(quest.stat_bonus || '{}')).map(([stat, val]) => 
+                      <div className="flex gap-1.5 flex-wrap">
+                        {Object.entries(typeof quest.stat_bonus === 'string' ? JSON.parse(quest.stat_bonus) : quest.stat_bonus || {}).map(([stat, val]) => 
                           val > 0 ? (
                             <span key={stat} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">
                               +{val} {stat.slice(0,3)}
@@ -180,6 +215,5 @@ export default function MyPathContent({ pathId }) {
       </div>
     </div>
   )
-
 }
 export const dynamic = 'force-dynamic'

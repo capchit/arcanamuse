@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createManualPath, updatePathFull, enhanceQuestWithAI, getPathById } from '@/app/actions'
 import { ArrowLeft, Plus, Trash2, Sparkles, Save } from 'lucide-react'
 import { useTheme } from '@/lib/useTheme'
+import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
 
 export default function ManualPathContent({ pathId }) {
   const router = useRouter()
@@ -17,22 +18,39 @@ export default function ManualPathContent({ pathId }) {
   const [loading, setLoading] = useState(false)
   const [enhancing, setEnhancing] = useState(null)
 
+  // 👇 Вспомогательная функция для получения userId
+  const getUserId = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) {
+      router.push('/login')
+      return null
+    }
+    return user.id  // UUID строка
+  }
+
   useEffect(() => {
     if (isEditing && pathId) {
-      const load = async () => {
-        const data = await getPathById(parseInt(pathId))
-        if (data) {
-          setTitle(data.title)
-          setQuests(data.quests.map(q => ({
-            title: q.title,
-            description: q.description,
-            stat_bonus: JSON.parse(q.stat_bonus || '{}')
-          })))
-        }
-      }
-      load()
+      loadPath(pathId)  // 👈 Передаём pathId как строку (UUID)
     }
   }, [isEditing, pathId])
+
+  const loadPath = async (pid) => {
+    try {
+      // pid — это UUID строка, не нужно parseInt!
+      const data = await getPathById(pid)
+      if (data) {
+        setTitle(data.title)
+        setQuests(data.quests.map(q => ({
+          id: q.id,
+          title: q.title,
+          description: q.description,
+          stat_bonus: typeof q.stat_bonus === 'string' ? JSON.parse(q.stat_bonus || '{}') : q.stat_bonus || {}
+        })))
+      }
+    } catch (e) {
+      console.error('❌ Ошибка загрузки пути:', e)
+    }
+  }
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const removeQuest = (idx) => { if (quests.length > 1) setQuests(quests.filter((_, i) => i !== idx)) }
@@ -41,24 +59,40 @@ export default function ManualPathContent({ pathId }) {
   const enhanceQuest = async (idx) => {
     if (!quests[idx].title.trim()) return
     setEnhancing(idx)
-    const aiData = await enhanceQuestWithAI(quests[idx].title)
-    const newQ = [...quests]
-    newQ[idx].description = aiData.description
-    newQ[idx].stat_bonus = aiData.stat_bonus
-    setQuests(newQ)
-    setEnhancing(null)
+    try {
+      const aiData = await enhanceQuestWithAI(quests[idx].title)
+      const newQ = [...quests]
+      newQ[idx].description = aiData.description
+      newQ[idx].stat_bonus = aiData.stat_bonus || {}
+      setQuests(newQ)
+    } finally { setEnhancing(null) }
   }
 
   const handleSave = async () => {
     if (!title.trim() || quests.some(q => !q.title.trim())) return
+    
     setLoading(true)
-    const userId = parseInt(localStorage.getItem('userId'))
-    const result = isEditing 
-      ? await updatePathFull(parseInt(pathId), title, quests)
-      : await createManualPath(userId, title, 'Самостоятельный путь', 'Путь создан вручную', quests)
-    setLoading(false)
-    if (result.success) router.push(isEditing ? `/my-path?pathId=${pathId}` : '/my-path')
-    else alert('Ошибка: ' + result.error)
+    try {
+      // 👇 Получаем userId из Supabase Auth
+      const userId = await getUserId()
+      if (!userId) { setLoading(false); return }
+      
+      const result = isEditing 
+        ? await updatePathFull(pathId, title, quests)  // 👈 pathId — строка (UUID)
+        : await createManualPath(userId, title, 'Самостоятельный путь', 'Путь создан вручную', quests)
+      
+      if (result.success) {
+        router.push(isEditing ? `/my-path?pathId=${pathId}` : '/my-path')
+        router.refresh()
+      } else {
+        alert('Ошибка: ' + result.error)
+      }
+    } catch (e) {
+      console.error('❌ Ошибка сохранения:', e)
+      alert('Ошибка: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
