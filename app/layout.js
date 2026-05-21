@@ -10,15 +10,12 @@ export const metadata = {
   description: 'Твой проводник к целям',
 }
 
+// app/layout.js
 export default function RootLayout({ children }) {
   return (
     <html lang="ru">
-      <body className={`${inter.className} bg-slate-950 text-white antialiased`}>
-        {/* Отступ снизу, чтобы контент не перекрывался панелью */}
-        <main className="pb-20 min-h-screen">
-          {children}
-        </main>
-        <BottomNav />
+      <body className="min-h-screen bg-slate-950 text-white">
+        {children}
       </body>
     </html>
   )

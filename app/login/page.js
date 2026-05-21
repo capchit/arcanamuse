@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { handleRegister, handleLogin } from '@/app/actions'
-import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
+import { supabase } from '@/lib/db'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -19,30 +19,34 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const result = isSignUp 
+      const result = isSignUp
         ? await handleRegister(email, password)
         : await handleLogin(email, password)
-        
+
       if (result.success) {
         if (isSignUp) {
-          // После регистрации просто переключаемся на вход
           alert('✅ Регистрация успешна! Теперь войдите.')
           setIsSignUp(false)
         } else {
-          // 👇 ПРИ ВХОДЕ: не сохраняем ничего в localStorage!
-          // Supabase сам создал сессию через cookie
+          // ⏳ Ждём 300мс, чтобы кука сессии успела записаться в браузер
+          await new Promise(resolve => setTimeout(resolve, 300))
+
+          // Проверяем, что клиентский Supabase увидел сессию
+          const { data: { session } } = await supabase.auth.getSession()
           
-          console.log('✅ Вход успешен, сессия создана')
-          
-          // 👇 Обновляем роутер, чтобы он "увидел" новую сессию
-          router.push('/')
-          router.refresh()  // 👈 ОБЯЗАТЕЛЬНО!
+          if (session) {
+            console.log('✅ Сессия активна, перенаправляем на главную...')
+            router.push('/')
+          } else {
+            // 🔑 Fallback: если кука не применилась асинхронно, делаем жёсткий редирект
+            console.warn('⚠️ Кука не применена, используем window.location')
+            window.location.href = '/'
+          }
         }
       } else {
-        setError(result.error || 'Произошла ошибка')
+        setError(result.error || 'Неверный email или пароль')
       }
     } catch (err) {
-      console.error('💥 Ошибка аутентификации:', err)
       setError('Произошла ошибка: ' + err.message)
     } finally {
       setLoading(false)

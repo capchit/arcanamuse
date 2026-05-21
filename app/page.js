@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Compass, Sparkles } from 'lucide-react'
 import { useTheme } from '@/lib/useTheme'
+import { supabase } from '@/lib/db'
 
 export default function HomePage() {
   const router = useRouter()
@@ -12,12 +13,29 @@ export default function HomePage() {
   const [checkingAuth, setCheckingAuth] = useState(true)
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId')
-    if (!userId) {
-      router.replace('/login')
-    } else {
-      setCheckingAuth(false)
+    // 👇 Функция должна быть async, чтобы использовать await
+    const checkAuth = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        
+        if (error || !user) {
+          console.log('🔐 User not authenticated, redirecting to login...')
+          router.replace('/login')  // 👈 replace вместо push, чтобы нельзя было вернуться назад
+          return
+        }
+        
+        console.log('✅ Authenticated user:', user.email)
+      } catch (err) {
+        console.error('❌ Auth check error:', err)
+        router.replace('/login')
+        return
+      } finally {
+        // 👇 ОБЯЗАТЕЛЬНО: выключаем спиннер, иначе будет вечная загрузка!
+        setCheckingAuth(false)
+      }
     }
+    
+    checkAuth()
   }, [router])
 
   // Пока проверяем авторизацию — показываем спиннер
@@ -29,7 +47,6 @@ export default function HomePage() {
     )
   }
 
-  // Те же классы фона что и в профиле
   const bgClass = isDark 
     ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' 
     : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'
@@ -45,7 +62,7 @@ export default function HomePage() {
         </p>
 
         <div className="space-y-4">
-          {/* Start a Path (ВЕДЁТ НА СОЗДАНИЕ) */}
+          {/* Start a Path */}
           <button
             onClick={() => router.push('/path')} 
             className={`w-full group relative overflow-hidden rounded-2xl border p-6 transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -67,7 +84,7 @@ export default function HomePage() {
             </div>
           </button>
 
-          {/* Get Inspiration (ВЕДЁТ НА ГЕНЕРАЦИЮ) */}
+          {/* Get Inspiration */}
           <button
             onClick={() => router.push('/inspiration/generate')}
             className={`w-full group relative overflow-hidden rounded-2xl border p-6 transition-all hover:scale-[1.02] active:scale-[0.98] ${
