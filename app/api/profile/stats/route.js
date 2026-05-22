@@ -15,7 +15,6 @@ export async function GET(request) {
     console.log('📊 [PROFILE API] Request for userId:', userId)
 
     if (!userId || userId === 'undefined' || userId === 'null') {
-      console.error('📊 [PROFILE API] Invalid userId:', userId)
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
@@ -31,7 +30,7 @@ export async function GET(request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('📊 [PROFILE API] Raw stats from DB:', stats)
+    console.log('📊 [PROFILE API] Raw stats:', stats)
 
     // Преобразуем массив в объект
     const statsObj = {}
@@ -49,17 +48,17 @@ export async function GET(request) {
     const titles = ['Новичок', 'Ученик', 'Мастер', 'Эксперт', 'Легенда', 'Архимаг']
     const title = titles[Math.min(level - 1, titles.length - 1)]
 
-    const response = {
+    // 👇 Добавляем заголовки чтобы браузер не кэшировал ответ
+    return NextResponse.json({
       stats: statsObj,
       level,
       progress,
       nextLevelAt: 10,
       title,
       totalPoints
-    }
-
-    console.log('📊 [PROFILE API] Sending response:', response)
-    return NextResponse.json(response)
+    }, {
+      headers: { 'Cache-Control': 'no-store, must-revalidate' }
+    })
     
   } catch (error) {
     console.error('📊 [PROFILE API] Exception:', error)

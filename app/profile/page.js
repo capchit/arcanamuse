@@ -89,7 +89,11 @@ export default function ProfilePage() {
       console.log('📊 Loading profile for:', userId)
       
       // 2. Запрашиваем статы через API
-      const response = await fetch(`/api/profile/stats?userId=${userId}`)
+     const response = await fetch(`/api/profile/stats?userId=${userId}`, {
+        // 👇 Эти опции отключают кэширование
+        cache: 'no-store',
+        next: { revalidate: 0 }
+      })
       
       if (!response.ok) {
         const errorData = await response.json()
