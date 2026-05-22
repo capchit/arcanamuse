@@ -137,13 +137,6 @@ export default function InspirationsPage() {
                   </div>
                   <div className="flex gap-1">
                     <button 
-                      onClick={() => handleCopy(insp.quote)}
-                      className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-blue-400`}
-                      title="Копировать"
-                    >
-                      <Copy size={16} />
-                    </button>
-                    <button 
                       onClick={() => handleView(insp.id)}
                       className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-purple-400`}
                       title="Просмотр"
