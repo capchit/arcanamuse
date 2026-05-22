@@ -2,55 +2,75 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getInspirationHistory, deleteInspiration } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
-import { Sparkles, Eye, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
+import { ArrowLeft, Trash2, Eye, Sparkles, Calendar, Copy } from 'lucide-react'
+import { supabase } from '@/lib/db'
 
-export default function InspirationPage() {
-  const [cards, setCards] = useState([])
+export default function InspirationsPage() {
+  const [inspirations, setInspirations] = useState([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  useEffect(() => { 
-    loadHistory() 
+  useEffect(() => {
+    loadInspirations()
   }, [])
 
-  const loadHistory = async () => {
+  const loadInspirations = async () => {
+    setLoading(true)
     try {
-      // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH (не из localStorage!)
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      
-      if (authError || !user) {
-        console.warn('⚠️ Пользователь не авторизован, перенаправляем на вход')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
         router.push('/login')
         return
       }
+
+      console.log('📚 Loading inspirations for user:', user.id)
       
-      const userId = user.id  // 👈 UUID строка: "a1b2c3d4-..."
-      console.log('📚 Загрузка истории для userId:', userId)
+      const response = await fetch(`/api/inspirations?userId=${user.id}`)
+      const data = await response.json()
       
-      const data = await getInspirationHistory(userId)
-      setCards(data || [])
-    } catch (err) {
-      console.error('❌ Ошибка загрузки истории:', err)
+      console.log('📚 API response:', data)
+      
+      if (data.success) {
+        setInspirations(data.inspirations || [])
+      } else {
+        console.error('❌ Error loading inspirations:', data.error)
+      }
+    } catch (e) {
+      console.error('❌ Error loading inspirations:', e)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation()
-    if (confirm('Удалить эту карту?')) {
-      try {
-        await deleteInspiration(id)
-        loadHistory()  // Перезагружаем список
-      } catch (err) {
-        console.error('❌ Ошибка удаления:', err)
-        alert('Не удалось удалить карту')
+  const handleDelete = async (id) => {
+    if (!confirm('Удалить это вдохновение?')) return
+    
+    try {
+      const response = await fetch(`/api/inspirations/${id}`, { method: 'DELETE' })
+      const result = await response.json()
+      
+      if (result.success) {
+        setInspirations(prev => prev.filter(i => i.id !== id))
+        alert('🗑️ Вдохновение удалено')
+      } else {
+        alert('Ошибка: ' + result.error)
       }
+    } catch (e) {
+      alert('Не удалось удалить')
+    }
+  }
+
+  const handleView = (id) => {
+    router.push(`/inspiration/view?id=${id}`)
+  }
+
+  const handleCopy = async (quote) => {
+    if (quote) {
+      await navigator.clipboard.writeText(quote)
+      alert('📋 Скопировано!')
     }
   }
 
@@ -63,67 +83,98 @@ export default function InspirationPage() {
   }
 
   return (
-    <div className={`min-h-screen pb-24 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} pb-24`}>
       <div className="max-w-md mx-auto px-4 pt-6">
-        <h1 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          <Sparkles className="text-purple-500" size={24} /> Вдохновение
-        </h1>
+        
+        {/* Шапка */}
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()} className={`p-2 rounded-xl ${isDark ? 'bg-white/5 text-gray-400' : 'bg-white text-gray-600 shadow'}`}>
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>✨ Архив вдохновений</h1>
+          <button 
+            onClick={() => router.push('/inspiration/generate')}
+            className="px-4 py-2 rounded-xl bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-all"
+          >
+            + Создать
+          </button>
+        </div>
 
-        {cards.length === 0 ? (
-          <div className="text-center py-20">
-            <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-purple-500/10' : 'bg-purple-100'}`}>
-              <Sparkles size={40} className="text-purple-500" />
-            </div>
-            <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'} mb-4`}>Пока нет сохранённых карт</p>
+        {/* Список */}
+        {inspirations.length === 0 ? (
+          <div className={`p-6 rounded-2xl border-2 border-dashed text-center ${isDark ? 'border-purple-500/30 text-gray-400' : 'border-purple-300 text-gray-500'}`}>
+            <Sparkles size={48} className="mx-auto mb-4 text-purple-400" />
+            <h3 className="text-lg font-bold mb-2">Пока нет сохранённых вдохновений</h3>
+            <p className="mb-4 text-sm">Создай своё первое вдохновение с помощью ИИ</p>
             <button 
-              onClick={() => router.push('/inspiration/generate')} 
-              className="px-6 py-2 rounded-full bg-purple-500 text-white font-medium hover:bg-purple-600 transition-all"
+              onClick={() => router.push('/inspiration/generate')}
+              className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium hover:from-purple-600 hover:to-pink-600 transition-all"
             >
-              Вытянуть карту
+              ✨ Сгенерировать вдохновение
             </button>
           </div>
         ) : (
           <div className="space-y-4">
-            {cards.map(c => (
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Найдено: {inspirations.length}
+            </p>
+            
+            {inspirations.map(insp => (
               <div 
-                key={c.id}
-                onClick={() => router.push(`/inspiration/view?id=${c.id}`)}
-                className={`group relative p-5 rounded-2xl border transition-all hover:scale-[1.01] cursor-pointer ${
-                  isDark 
-                    ? 'bg-gradient-to-br from-purple-900/20 to-slate-900/40 border-purple-500/20 hover:border-purple-400/40' 
-                    : 'bg-gradient-to-br from-purple-50 to-white border-purple-200'
-                }`}
+                key={insp.id}
+                className={`p-5 rounded-2xl border transition-all hover:scale-[1.02] ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-200 shadow-sm'}`}
               >
-                {/* Кнопка удаления */}
-                <button
-                  onClick={(e) => handleDelete(e, c.id)} 
-                  className="absolute top-3 right-3 p-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 z-10"
-                >
-                  <Trash2 size={16} />
-                </button>
-
-                <div className="flex items-start gap-4">
-                  {/* Иконка карты */}
-                  <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center ${
-                    isDark ? 'bg-purple-500/20' : 'bg-purple-200'
-                  }`}>
-                    <Sparkles size={24} className="text-purple-500" />
-                  </div>
-
-                  {/* Контент */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className={`font-bold text-lg truncate ${isDark ? 'text-purple-300' : 'text-purple-800'}`}>
-                      {c.archetype}
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    {insp.archetype && (
+                      <span className={`inline-block text-xs px-2 py-1 rounded-full mb-2 ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
+                        ✨ {insp.archetype}
+                      </span>
+                    )}
+                    <h3 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {insp.archetype || 'Вдохновение'}
                     </h3>
-                    <p className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                      {new Date(c.created_at).toLocaleDateString('ru-RU')}
-                    </p>
-                    
-                    {/* Цитата с безопасным парсингом */}
-                    <p className={`text-sm italic line-clamp-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      "{c.quote || (c.data && typeof c.data === 'string' ? JSON.parse(c.data).quote : null) || 'Нет цитаты'}"
-                    </p>
                   </div>
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={() => handleCopy(insp.quote)}
+                      className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-blue-400`}
+                      title="Копировать"
+                    >
+                      <Copy size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleView(insp.id)}
+                      className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-purple-400`}
+                      title="Просмотр"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(insp.id)}
+                      className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-red-400`}
+                      title="Удалить"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                
+                {insp.quote && (
+                  <p className={`text-sm mb-3 line-clamp-3 italic ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    "{insp.quote.substring(0, 150)}..."
+                  </p>
+                )}
+                
+                {insp.action && (
+                  <div className={`text-xs p-2 rounded-lg mb-3 ${isDark ? 'bg-emerald-500/10 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
+                    🎯 {insp.action}
+                  </div>
+                )}
+                
+                <div className={`flex items-center gap-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <Calendar size={12} />
+                  {new Date(insp.created_at).toLocaleDateString('ru-RU')}
                 </div>
               </div>
             ))}

@@ -15,17 +15,23 @@ export async function GET(request) {
     
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
 
+    console.log('📚 [API GET] Loading for userId:', userId)
+
     const { data, error } = await supabaseAdmin
-      .from('inspiration_history')  // 👈 Твоя таблица
+      .from('inspiration_history')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ [API GET] DB error:', error)
+      throw error
+    }
 
+    console.log('✅ [API GET] Found:', data?.length || 0, 'inspirations')
     return NextResponse.json({ success: true, inspirations: data || [] })
   } catch (error) {
-    console.error('[API GET] Error:', error)
+    console.error('💥 [API GET] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
