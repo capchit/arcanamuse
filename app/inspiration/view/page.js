@@ -1,15 +1,12 @@
 // app/inspiration/view/page.js
-import { Suspense } from 'react'
-import SuspenseWrapper from './SuspenseWrapper'
+'use client'
+import { useSearchParams } from 'next/navigation'
+import InspirationViewContent from './InspirationViewContent'
 
-export default function Page() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Загрузка карты...
-      </div>
-    }>
-      <SuspenseWrapper />
-    </Suspense>
-  )
+export default function InspirationViewPage() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
+  
+  return <InspirationViewContent id={id} />
 }
+export const dynamic = 'force-dynamic'

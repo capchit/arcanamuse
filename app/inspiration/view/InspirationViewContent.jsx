@@ -1,8 +1,8 @@
-// app/inspiration/view/page.js
+// app/inspiration/view/InspirationViewContent.jsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { getInspirationById } from '@/app/actions'
+// 👇 Убрали getInspirationById — будем использовать прямой API вызов
 import { ArrowLeft, Download, Sparkles, Eye, Zap, Target, Mic, Shield, Lightbulb } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useTheme } from '@/lib/useTheme'
@@ -17,6 +17,7 @@ const STAT_COLORS = {
   resilience: 'text-emerald-400 bg-emerald-500/20', 
   insight: 'text-orange-400 bg-orange-500/20' 
 }
+
 export default function InspirationViewContent({ id }) {
   const [card, setCard] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -26,37 +27,84 @@ export default function InspirationViewContent({ id }) {
 
   useEffect(() => {
     if (id) {
-      getInspirationById(parseInt(id)).then(data => {
-        setCard(data)
-        setLoading(false)
-      })
+      loadInspiration(id)
     }
   }, [id])
 
+  // 👇 Прямой вызов API вместо Server Action
+  const loadInspiration = async (inspirationId) => {
+    try {
+      console.log('📖 Loading inspiration:', inspirationId)
+      
+      const response = await fetch(`/api/inspirations/${inspirationId}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setCard(data.inspiration)
+      } else {
+        console.error('❌ API error:', data.error)
+        alert('Ошибка загрузки: ' + data.error)
+        router.push('/inspiration')
+      }
+    } catch (e) {
+      console.error('❌ Error loading inspiration:', e)
+      alert('Не удалось загрузить вдохновение')
+      router.push('/inspiration')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleDownload = async () => {
     const node = document.getElementById('inspiration-card-view')
-    if (!node) return
+    if (!node || !card) return
     try {
-      const dataUrl = await toPng(node, { backgroundColor: isDark ? '#0f172a' : '#ffffff', quality: 1, pixelRatio: 2 })
+      const dataUrl = await toPng(node, { 
+        backgroundColor: isDark ? '#0f172a' : '#ffffff', 
+        quality: 1, 
+        pixelRatio: 2 
+      })
       const link = document.createElement('a')
       link.download = `ArcanaMuse_${card.archetype}.png`
       link.href = dataUrl
       link.click()
-    } catch (e) { console.error(e) }
+    } catch (e) { 
+      console.error(e) 
+    }
   }
-if (typeof window === 'undefined') {
-    return null // или спиннер загрузки
+
+  if (typeof window === 'undefined') return null
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent" />
+      </div>
+    )
   }
   
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent"></div></div>
-  if (!card) return <div className="min-h-screen flex items-center justify-center text-white">Карта не найдена</div>
+  if (!card) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <p>Вдохновение не найдено</p>
+        <button onClick={() => router.push('/inspiration')} className="ml-4 px-4 py-2 bg-purple-500 rounded-xl text-white">
+          Назад к архиву
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'} flex flex-col p-4 transition-colors`}>
       <div className="w-full max-w-md mx-auto space-y-6 flex-1">
+        
         {/* Шапка */}
         <div className="flex items-center justify-between pt-4">
-          
           <button onClick={() => router.back()} className={`p-2 rounded-xl ${isDark ? 'bg-white/5 text-gray-400' : 'bg-white text-gray-600 shadow'}`}>
             <ArrowLeft size={20} />
           </button>
@@ -78,7 +126,7 @@ if (typeof window === 'undefined') {
               {card.archetype}
             </h2>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-              {card.archetype_hint || 'Послание дня'}
+              {card.archetype_meaning || card.archetype_hint || 'Послание дня'}
             </p>
           </div>
 
@@ -92,7 +140,7 @@ if (typeof window === 'undefined') {
           <div className={`p-5 rounded-2xl mb-4 text-center ${isDark ? 'bg-indigo-500/10 border border-indigo-500/30' : 'bg-indigo-50 border border-indigo-200'}`}>
             <p className="text-xs uppercase tracking-widest mb-2 text-indigo-400">Вопрос</p>
             <p className={`text-lg font-serif italic ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              "{card.question || card.quote}"
+              "{card.quote || card.question}"
             </p>
           </div>
 
@@ -120,7 +168,7 @@ if (typeof window === 'undefined') {
           )}
 
           <button 
-             onClick={() => router.push('/inspiration/generate')} 
+            onClick={() => router.push('/inspiration/generate')} 
             className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${isDark ? 'bg-white/5 hover:bg-white/10 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
           >
             <Sparkles size={16} /> 

@@ -10,21 +10,30 @@ const supabaseAdmin = createClient(
 // GET: получить одно вдохновение
 export async function GET(request, { params }) {
   try {
-    const { id } = params
+    // 👇 ВАЖНО: в Next.js 14+ params — это Promise!
+    const { id } = await params
+    
+    console.log('📖 [API GET by ID] Fetching inspiration:', id)
+    
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
     
     const { data, error } = await supabaseAdmin
-      .from('inspiration_history')  // 👈 Правильное имя
+      .from('inspiration_history')
       .select('*')
       .eq('id', id)
       .single()
 
     if (error || !data) {
+      console.error('❌ [API GET by ID] Not found:', error)
       return NextResponse.json({ error: 'Вдохновение не найдено' }, { status: 404 })
     }
 
+    console.log('✅ [API GET by ID] Found:', data.id)
     return NextResponse.json({ success: true, inspiration: data })
   } catch (error) {
-    console.error('[API GET inspiration] Error:', error)
+    console.error('💥 [API GET by ID] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -32,18 +41,29 @@ export async function GET(request, { params }) {
 // DELETE: удалить вдохновение
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params
+    // 👇 ВАЖНО: в Next.js 14+ params — это Promise!
+    const { id } = await params
+    
+    console.log('🗑️ [API DELETE] Deleting inspiration:', id)
+
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
 
     const { error } = await supabaseAdmin
-      .from('inspiration_history')  // 👈 Правильное имя
+      .from('inspiration_history')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ [API DELETE] Error:', error)
+      throw error
+    }
 
+    console.log('✅ [API DELETE] Deleted:', id)
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[API DELETE inspiration] Error:', error)
+    console.error('💥 [API DELETE] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
