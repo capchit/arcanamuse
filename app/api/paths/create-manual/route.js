@@ -1,53 +1,58 @@
 // app/api/paths/create-manual/route.js
-import { supabase } from '@/lib/db'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+)
 
 export async function POST(request) {
   try {
-    // Получаем данные из запроса
     const { userId, title, quests } = await request.json()
+    
+    if (!userId || userId === 'undefined') {
+      return NextResponse.json({ error: 'Неверный userId' }, { status: 400 })
+    }
 
-    // 1. Создаем сам Путь (Path)
-    const { data: path, error: pathError } = await supabase
+    // Создаём путь
+    const { data: path, error: pathError } = await supabaseAdmin
       .from('paths')
       .insert({
         user_id: userId,
         title: title,
-        archetype: 'Самостоятельный путь', 
-        archetype_meaning: 'Путь создан вручную пользователем'
+        archetype: 'Самостоятельный путь',
+        archetype_meaning: 'Путь создан вручную'
       })
       .select()
       .single()
 
     if (pathError) {
-      console.error('Ошибка создания пути:', pathError)
-      return NextResponse.json({ success: false, error: pathError.message }, { status: 500 })
+      console.error('[Manual Create] Path error:', pathError)
+      return NextResponse.json({ error: pathError.message }, { status: 500 })
     }
 
-    // 2. Подготавливаем квесты для вставки
+    // Создаём квесты
     const questsToInsert = quests.map((q, i) => ({
       path_id: path.id,
       title: q.title,
       description: q.description || '',
-      order_idx: i, // Порядок квестов (0, 1, 2...)
-      stat_bonus: q.stat_bonus || { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 }
+      order_idx: i,
+      stat_bonus: q.stat_bonus || {}
     }))
 
-    // 3. Вставляем квесты, если они есть
     if (questsToInsert.length > 0) {
-      const { error: questsError } = await supabase.from('quests').insert(questsToInsert)
+      const { error: questsError } = await supabaseAdmin.from('quests').insert(questsToInsert)
       if (questsError) {
-        console.error('Ошибка создания квестов:', questsError)
-        // Если квесты не создались, удаляем созданный путь (откат транзакции вручную)
-        await supabase.from('paths').delete().eq('id', path.id)
-        return NextResponse.json({ success: false, error: questsError.message }, { status: 500 })
+        console.error('[Manual Create] Quests error:', questsError)
+        await supabaseAdmin.from('paths').delete().eq('id', path.id)
+        return NextResponse.json({ error: questsError.message }, { status: 500 })
       }
     }
 
     return NextResponse.json({ success: true, pathId: path.id })
-
   } catch (error) {
-    console.error('Критическая ошибка в API:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('[Manual Create] Exception:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

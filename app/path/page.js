@@ -2,35 +2,31 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createNewPath, createSmartManualPath, enhanceQuestWithAI } from '@/app/actions'
+// 👇 Убрали лишние импорты Server Actions, оставили только enhanceQuestWithAI (он работает)
+import { enhanceQuestWithAI } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { ArrowLeft, Sparkles, Pencil, Plus, Trash2 } from 'lucide-react'
-import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
+import { supabase } from '@/lib/db'
 
 export default function CreatePathPage() {
   const [mode, setMode] = useState('ai')
-  
-  // AI mode
   const [goal, setGoal] = useState('')
-  
-  // Manual mode
   const [title, setTitle] = useState('')
   const [quests, setQuests] = useState([{ title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const [enhancing, setEnhancing] = useState(null)
-  
   const [loading, setLoading] = useState(false)
+  
   const router = useRouter()
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  // 👇 Вспомогательная функция для получения userId
   const getUserId = async () => {
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) {
       router.push('/login')
       return null
     }
-    return user.id  // UUID строка
+    return user.id
   }
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
@@ -53,71 +49,84 @@ export default function CreatePathPage() {
     } finally { setEnhancing(null) }
   }
 
+  // ✅ ИСПРАВЛЕНО: Убрали router.refresh(), добавили блокировку повторных кликов
   const handleCreateAI = async () => {
-  if (!goal.trim()) return
-  setLoading(true)
-  
-  try {
-    console.log('🛤️ [CLIENT] Начинаем создание пути...')
-    
-    const userId = await getUserId()
-    if (!userId) { 
-      setLoading(false)
-      return 
-    }
-    
-    console.log('📡 [CLIENT] Вызов API /api/paths/create...')
-    
-    const response = await fetch('/api/paths/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, goal: goal.trim() })
-    })
-    
-    const result = await response.json()
-    console.log('📥 [CLIENT] Ответ от API:', result)
-    
-    if (result.success && result.pathId) {
-      console.log('✅ [CLIENT] Путь создан! ID:', result.pathId)
-      router.push(`/my-path?pathId=${result.pathId}`)
-      router.refresh()
-    } else {
-      console.error('❌ [CLIENT] Ошибка:', result.error)
-      alert('Ошибка: ' + result.error)
-    }
-  } catch (e) {
-    console.error('💥 [CLIENT] Исключение:', e)
-    alert('Ошибка: ' + e.message)
-  } finally {
-    setLoading(false)
-  }
-}
-
-  const handleCreateManual = async () => {
-    if (!title.trim() || quests.some(q => !q.title.trim())) return
+    if (!goal.trim() || loading) return
     setLoading(true)
     
-    const userId = await getUserId()
-    if (!userId) { setLoading(false); return }
-    
     try {
-      const res = await createSmartManualPath(userId, title, quests)
-      if (res.success && res.pathId) {
-        router.push(`/my-path?pathId=${res.pathId}`)
-        router.refresh()
+      const userId = await getUserId()
+      if (!userId) { setLoading(false); return }
+      
+      console.log('📡 [CLIENT] Вызов API /api/paths/create...')
+      
+      const response = await fetch('/api/paths/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, goal: goal.trim() })
+      })
+      
+      const result = await response.json()
+      console.log('📥 [CLIENT] Ответ от API:', result)
+      
+      if (result.success && result.pathId) {
+        console.log('✅ [CLIENT] Путь создан! Переход на:', `/my-path?pathId=${result.pathId}`)
+        // 👇 ТОЛЬКО push, без refresh — он мешает навигации
+        router.push(`/my-path?pathId=${result.pathId}`)
       } else {
-        alert('Ошибка: ' + res.error)
+        console.error('❌ [CLIENT] Ошибка:', result.error)
+        alert('Ошибка: ' + result.error)
       }
-    } catch (e) { 
-      console.error('❌ Ошибка создания пути вручную:', e)
-      alert('Ошибка: ' + e.message) 
-    } finally { 
-      setLoading(false) 
+    } catch (e) {
+      console.error('💥 [CLIENT] Исключение:', e)
+      alert('Ошибка сети: ' + e.message)
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (typeof window === 'undefined') {
-    return null
+  // ✅ ИСПРАВЛЕНО: Используем API вместо Server Action
+  const handleCreateManual = async () => {
+    if (!title.trim() || quests.some(q => !q.title.trim()) || loading) return
+    setLoading(true)
+    
+    try {
+      const userId = await getUserId()
+      if (!userId) { setLoading(false); return }
+      
+      console.log('📡 [CLIENT] Вызов API /api/paths/create-manual...')
+      
+      const response = await fetch('/api/paths/create-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, title: title.trim(), quests })
+      })
+      
+      const result = await response.json()
+      console.log('📥 [CLIENT] Ответ от API (manual):', result)
+      
+      if (result.success && result.pathId) {
+        console.log('✅ [CLIENT] Путь создан вручную! Переход...')
+        router.push(`/my-path?pathId=${result.pathId}`)
+      } else {
+        alert('Ошибка: ' + (result.error || 'Не удалось создать путь'))
+      }
+    } catch (e) {
+      console.error('💥 [CLIENT] Исключение:', e)
+      alert('Ошибка сети: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (typeof window === 'undefined') return null
+  
+  if (loading) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-gray-100'}`}>
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent" />
+      </div>
+    )
   }
   
   return (
@@ -151,16 +160,28 @@ export default function CreatePathPage() {
               placeholder="Опиши свою цель (например: выучить английский, запустить проект...)"
               className={`w-full p-4 rounded-2xl resize-none h-32 ${isDark ? 'bg-white/5 border-white/20 text-white placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900'} border focus:ring-2 focus:ring-purple-500 outline-none`}
             />
-            <button onClick={handleCreateAI} disabled={loading || !goal.trim()} className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold disabled:opacity-50 hover:from-purple-600 hover:to-pink-600 transition-all">
-              {loading ? 'Генерация...' : '✨ Создать путь с ИИ'}
+            <button 
+              onClick={handleCreateAI} 
+              disabled={loading || !goal.trim()} 
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold disabled:opacity-50 hover:from-purple-600 hover:to-pink-600 transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                  Генерация...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={20} /> Создать путь с ИИ
+                </>
+              )}
             </button>
           </div>
         )}
 
-        {/* === РЕЖИМ ВРУЧНУЮ (Упрощённый) === */}
+        {/* === РЕЖИМ ВРУЧНУЮ === */}
         {mode === 'manual' && (
           <div className="space-y-4">
-            {/* Название пути */}
             <input
               type="text"
               placeholder="Название пути (цель)"
@@ -169,7 +190,6 @@ export default function CreatePathPage() {
               className={`w-full p-4 rounded-2xl font-bold ${isDark ? 'bg-white/5 border-white/20 text-white placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900'} border focus:ring-2 focus:ring-purple-500 outline-none`}
             />
 
-            {/* Квесты */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Квесты</span>
@@ -196,10 +216,9 @@ export default function CreatePathPage() {
                     className={`w-full p-3 rounded-xl ${isDark ? 'bg-black/20 text-white' : 'bg-gray-50 text-gray-900'} border border-transparent focus:border-purple-500 outline-none`}
                   />
                   
-                  {/* Описание и кнопка ИИ */}
                   <div className="flex gap-2">
                     <textarea
-                      placeholder="Описание (авто или вручную)"
+                      placeholder="Описание"
                       value={q.description}
                       onChange={(e) => updateQuestField(idx, 'description', e.target.value)}
                       className={`flex-1 p-3 rounded-xl text-sm h-20 ${isDark ? 'bg-black/20 text-gray-300' : 'bg-gray-50 text-gray-700'} border border-transparent focus:border-purple-500 outline-none resize-none`}
@@ -208,13 +227,11 @@ export default function CreatePathPage() {
                       onClick={() => enhanceQuest(idx)} 
                       disabled={enhancing === idx || !q.title.trim()}
                       className={`self-start p-3 rounded-xl ${enhancing === idx ? 'bg-purple-500/20 text-purple-300 animate-pulse' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'} transition-all`}
-                      title="Детализировать ИИ"
                     >
                       <Sparkles size={20} />
                     </button>
                   </div>
 
-                  {/* Бонусы статов (компактный просмотр) */}
                   <div className="grid grid-cols-6 gap-1">
                     {['vision', 'craft', 'focus', 'voice', 'resilience', 'insight'].map(stat => (
                       <div key={stat} className="flex flex-col items-center">
@@ -227,7 +244,6 @@ export default function CreatePathPage() {
               ))}
             </div>
 
-            {/* Кнопка сохранения */}
             <button
               onClick={handleCreateManual}
               disabled={loading || !title.trim() || quests.some(q => !q.title.trim())}
