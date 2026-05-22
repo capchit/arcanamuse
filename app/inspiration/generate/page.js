@@ -22,7 +22,7 @@ export default function GenerateInspirationPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000)
       
-     const response = await fetch('/api/inspiration/generate', {
+     const response = await fetch('/api/inspirations/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,9 +70,9 @@ export default function GenerateInspirationPage() {
       console.log('🎴 Запрос генерации для userId:', userId)
       
       // 👇 Вызываем API вместо прямого Server Action
-      console.log('📡 Вызов /api/inspiration/generate...')
+      console.log('📡 Вызов /api/inspirations/generate...')
       
-      const response = await fetch('/api/inspiration/generate', {
+      const response = await fetch('/api/inspirations/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
