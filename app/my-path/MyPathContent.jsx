@@ -1,12 +1,11 @@
-// app/my-path/page.js
+// app/my-path/MyPathContent.jsx
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getUserActivePath, finishQuest, uncompleteQuest, finishPath, restorePath } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { ArrowLeft, Trophy, CheckCircle2, Circle, Flame, Pencil } from 'lucide-react'
-import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
+import { supabase } from '@/lib/db'
 
 export default function MyPathContent({ pathId }) {
   const router = useRouter()
@@ -23,7 +22,6 @@ export default function MyPathContent({ pathId }) {
   const loadPath = async () => {
     setLoading(true)
     try {
-      // 👇 ПОЛУЧАЕМ USER ID ИЗ SUPABASE AUTH
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       
       if (authError || !user) {
@@ -32,15 +30,16 @@ export default function MyPathContent({ pathId }) {
         return
       }
       
-      const userId = user.id  // 👈 UUID строка
+      const userId = user.id
       
-      if (!pathId) {
-        // Если pathId не передан, загружаем активный путь
-        const data = await getUserActivePath(userId)
-        setPath(data)
+      // 👇 Загружаем путь через API (не через Server Action)
+      const response = await fetch(`/api/paths/${pathId || 'active'}?userId=${userId}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setPath(data.path)
       } else {
-        const data = await getUserActivePath(userId, pathId)
-        setPath(data)
+        console.error('❌ Ошибка загрузки пути:', data.error)
       }
     } catch (e) {
       console.error('❌ Ошибка загрузки пути:', e)
@@ -49,31 +48,67 @@ export default function MyPathContent({ pathId }) {
     }
   }
 
-  const handleToggleQuest = async (questId, isCompleted) => {
-    try {
-      if (isCompleted) {
-        await uncompleteQuest(questId)
-      } else {
-        await finishQuest(questId)
-      }
-      // Перезагружаем данные пути
-      loadPath()
-    } catch (e) {
-      console.error('❌ Ошибка обновления квеста:', e)
-      alert('Не удалось обновить квест')
+ const handleToggleQuest = async (questId, isCurrentlyCompleted) => {
+  const newStatus = !isCurrentlyCompleted
+  
+  console.log('🔄 Toggle quest:', questId, 'to:', newStatus ? 'completed' : 'pending')
+  
+  try {
+    // Оптимистичное обновление
+    setPath(prev => ({
+      ...prev,
+      quests: prev.quests.map(q => 
+        q.id === questId ? { ...q, status: newStatus ? 'completed' : 'pending' } : q
+      )
+    }))
+
+    const response = await fetch('/api/quests/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        questId, 
+        isCompleted: newStatus 
+      })
+    })
+    
+    console.log('📥 Response:', response.status)
+    const result = await response.json()
+    console.log('📥 Result:', result)
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to toggle quest')
     }
+    
+    // Перезагружаем для актуальных данных
+    await loadPath()
+    
+  } catch (error) {
+    console.error('❌ Error toggling quest:', error)
+    alert('Не удалось обновить квест: ' + error.message)
+    loadPath() // Откат
   }
+}
 
   const handleFinishPath = async () => {
     if (!confirm('🏁 Завершить этот путь? Он переместится в историю подвигов.')) return
     
     try {
-      await finishPath(path.id)
-      router.push('/paths')
-      router.refresh()
-    } catch (e) {
-      console.error('❌ Ошибка завершения пути:', e)
-      alert('Ошибка завершения пути')
+      const response = await fetch('/api/paths/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathId: path.id })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        router.push('/paths')
+      } else {
+        alert('Ошибка: ' + result.error)
+      }
+    } catch (error) {
+      console.error('❌ Ошибка завершения пути:', error)
+      alert('Не удалось завершить путь')
     }
   }
 
@@ -119,7 +154,6 @@ export default function MyPathContent({ pathId }) {
           </button>
           <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Мой Путь</h1>
           <div className="w-10" />
-          {/* Кнопка редактирования */}
           <button 
             onClick={() => router.push(`/path/edit?pathId=${path.id}`)}
             className={`p-2 rounded-xl ${isDark ? 'bg-purple-500/20 text-purple-400' : 'bg-purple-100 text-purple-600'}`}
@@ -187,7 +221,6 @@ export default function MyPathContent({ pathId }) {
                       <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                         Квест #{idx + 1}
                       </span>
-                      {/* Статы квеста */}
                       <div className="flex gap-1.5 flex-wrap">
                         {Object.entries(typeof quest.stat_bonus === 'string' ? JSON.parse(quest.stat_bonus) : quest.stat_bonus || {}).map(([stat, val]) => 
                           val > 0 ? (
