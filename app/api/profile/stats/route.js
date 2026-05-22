@@ -16,7 +16,6 @@ export async function GET(request) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 })
     }
 
-    // Загружаем статы
     const { data: stats } = await supabaseAdmin
       .from('user_stats')
       .select('stat_name, value')
@@ -30,7 +29,6 @@ export async function GET(request) {
       }
     }
 
-    // Считаем уровень
     const totalPoints = Object.values(statsObj).reduce((sum, val) => sum + val, 0)
     const level = Math.floor(totalPoints / 10) + 1
     const progress = totalPoints % 10

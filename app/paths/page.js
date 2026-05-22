@@ -41,22 +41,22 @@ export default function PathsPage() {
     }
   }
 
-   const handleDeletePath = async (e, pathId) => {
+const handleDeletePath = async (e, pathId) => {
     e.stopPropagation()
     if (!confirm('Удалить этот путь и всю его историю?')) return
     
     try {
       console.log('🗑️ Deleting path:', pathId)
       
-      const response = await fetch(`/api/paths/${pathId}`, {
+      // 👇 Используем query parameter
+      const response = await fetch(`/api/paths?pathId=${pathId}`, {
         method: 'DELETE'
       })
       
       const result = await response.json()
-      console.log('🗑️ Delete result:', result)
       
       if (result.success) {
-        loadPaths() // 👈 Здесь loadPaths() — правильная функция для этого компонента
+        loadPaths()
       } else {
         alert('Ошибка: ' + result.error)
       }
@@ -73,12 +73,12 @@ export default function PathsPage() {
     try {
       console.log('♻️ Restoring path:', pathId)
       
-      const response = await fetch(`/api/paths/${pathId}/restore`, {
+      // 👇 Используем query parameter
+      const response = await fetch(`/api/paths/restore?pathId=${pathId}`, {
         method: 'POST'
       })
       
       const result = await response.json()
-      console.log('♻️ Restore result:', result)
       
       if (result.success) {
         loadPaths()

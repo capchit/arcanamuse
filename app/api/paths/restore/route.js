@@ -1,4 +1,4 @@
-// app/api/paths/[pathId]/restore/route.js
+// app/api/paths/restore/route.js
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -7,29 +7,25 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 )
 
-export async function POST(request, { params }) {
+export async function POST(request) {
   try {
-    const { pathId } = params
+    const { searchParams } = new URL(request.url)
+    const pathId = searchParams.get('pathId')
+    
     console.log('[API Restore] Path ID:', pathId)
 
     if (!pathId) {
       return NextResponse.json({ error: 'pathId required' }, { status: 400 })
     }
 
-    // Обновляем статус на active
     const { error } = await supabaseAdmin
       .from('paths')
       .update({ status: 'active' })
       .eq('id', pathId)
 
-    if (error) {
-      console.error('[API Restore] Error:', error)
-      throw error
-    }
+    if (error) throw error
 
-    console.log('[API Restore] Success')
     return NextResponse.json({ success: true })
-    
   } catch (error) {
     console.error('[API Restore] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
