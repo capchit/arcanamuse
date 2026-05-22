@@ -1,6 +1,6 @@
 // app/api/inspirations/generate/route.js
 import { NextResponse } from 'next/server'
-import { generateInspiration } from '@/lib/ai/generate'  // 👈 Прямой импорт из lib
+import { generateInspiration } from '@/lib/ai/generate'
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -14,33 +14,34 @@ const withTimeout = (promise, ms) => {
 
 export async function POST(request) {
   try {
-    // userId нам не нужен для генерации, но можем прочитать для логов
     const { userId } = await request.json()
-    console.log('🤖 [API] Generating inspiration (userId:', userId, ')')
+    console.log('🤖 [API] Generating inspiration (session:', Date.now(), ')')
 
     let result
     try {
-      // 👇 Вызываем generateInspiration() БЕЗ userId
       result = await withTimeout(generateInspiration(), 8000)
       console.log('✅ [API] AI responded')
     } catch (aiErr) {
       console.warn('⚠️ [API] AI timeout, using fallback')
-      // Фолбэк уже встроен в generateInspiration(), но на всякий случай:
-      result = {
-        archetype: "Мудрец",
-        archetype_hint: "Делится мудростью",
-        visual: "Древняя библиотека",
-        question: "Какой урок поможет тебе?",
-        action: "Запиши мысль в дневник",
-        stat_bonus: { vision:1, craft:0, focus:1, voice:0, resilience:0, insight:1 }
-      }
+      // Фолбэк уже встроен в generateInspiration()
+      result = { success: false, error: 'Generation failed' }
     }
 
     if (!result?.archetype) {
       return NextResponse.json({ success: false, error: 'Не удалось сгенерировать' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, card: result })
+    // 👇 Отключаем кэширование на всех уровнях
+    return NextResponse.json(
+      { success: true, card: result },
+      {
+        headers: {
+          'Cache-Control': 'no-store, must-revalidate, private, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    )
   } catch (error) {
     console.error('💥 [API] Error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
