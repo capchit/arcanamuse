@@ -16,11 +16,10 @@ export default function GenerateInspirationPage() {
   const isDark = theme === 'dark'
 
   // 👇 Функция сохранения через API (вместо Server Action)
-  const saveInspiration = async (userId, cardData) => {
+ 
+const saveInspiration = async (userId, cardData) => {
   try {
-    console.log('💾 [SAVE] === START ===')
-    console.log('💾 [SAVE] userId:', userId)
-    console.log('💾 [SAVE] cardData:', cardData)
+    console.log('💾 [SAVE] Saving...')
     
     const response = await fetch('/api/inspirations', {
       method: 'POST',
@@ -28,7 +27,7 @@ export default function GenerateInspirationPage() {
       body: JSON.stringify({
         userId,
         title: cardData.archetype || 'Новое вдохновение',
-        content: cardData.question || cardData.quote || '',
+        quote: cardData.question || cardData.quote || '',  // ← Передаём 'quote'
         archetype: cardData.archetype,
         archetype_meaning: cardData.archetype_hint,
         visual: cardData.visual,
@@ -37,18 +36,14 @@ export default function GenerateInspirationPage() {
       })
     })
 
-    console.log('💾 [SAVE] Response status:', response.status)
-    
     const result = await response.json()
     console.log('💾 [SAVE] Result:', result)
     
     if (result.success) {
-      console.log('✅ [SAVE] Saved successfully! ID:', result.inspiration?.id)
+      console.log('✅ [SAVE] Saved!')
       return true
-    } else {
-      console.error('❌ [SAVE] API error:', result.error)
-      return false
     }
+    return false
   } catch (e) {
     console.error('❌ [SAVE] Exception:', e)
     return false

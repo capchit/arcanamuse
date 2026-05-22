@@ -33,39 +33,40 @@ export async function GET(request) {
 // POST: сохранение нового
 export async function POST(request) {
   try {
-    const { userId, title, content, archetype, archetype_meaning, visual, action, tags } = await request.json()
+    const { userId, title, quote, content, archetype, archetype_meaning, visual, action, tags } = await request.json()
 
-    console.log('[API POST] Received:', { userId, title, archetype })
+    console.log('📥 [API POST] Received:', { userId, title, archetype })
 
     if (!userId || !title) {
       return NextResponse.json({ error: 'userId и title обязательны' }, { status: 400 })
     }
 
+    // 👇 Используем ПРАВИЛЬНЫЕ имена колонок из твоей БД
     const { data, error } = await supabaseAdmin
-      .from('inspiration_history')  // 👈 Твоя таблица
+      .from('inspiration_history')
       .insert({
         user_id: userId,
-        title,
-        content: content || '',
+        title: title,
+        quote: quote || content || '',  // ← Колонка называется 'quote'!
         archetype: archetype || null,
         archetype_meaning: archetype_meaning || null,
         visual: visual || null,
         action: action || null,
-        tags: tags || [],
+        // data: tags || [],  // ← Если нужно сохранить теги в поле 'data'
         created_at: new Date().toISOString()
       })
       .select()
       .single()
 
     if (error) {
-      console.error('[API POST] DB error:', error)
-      throw error
+      console.error('❌ [API POST] DB error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('[API POST] Created:', data.id)
+    console.log('✅ [API POST] Created:', data.id)
     return NextResponse.json({ success: true, inspiration: data })
   } catch (error) {
-    console.error('[API POST] Error:', error)
+    console.error('💥 [API POST] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
