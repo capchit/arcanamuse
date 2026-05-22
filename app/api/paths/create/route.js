@@ -3,60 +3,74 @@ import { createClient } from '@supabase/supabase-js'
 import { generatePath } from '@/lib/ai/generate'
 import { NextResponse } from 'next/server'
 
-// 👇 Создаём клиент с SERVICE ROLE ключом (обходит RLS)
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 )
+
+// 👇 Хелпер для таймаута (не даёт функции зависнуть)
+const withTimeout = (promise, ms) => {
+  let timer
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('AI_TIMEOUT')), ms)
+    })
+  ]).finally(() => clearTimeout(timer))
+}
 
 export async function POST(request) {
   try {
     const { userId, goal } = await request.json()
-    
-    console.log('[API] Создание пути для:', userId)
-    
-    // Проверка: userId должен быть валидным UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!userId || !uuidRegex.test(userId)) {
-      return NextResponse.json(
-        { success: false, error: 'Неверный userId' },
-        { status: 400 }
-      )
+    console.log('🛤️ [CREATE] Start | userId:', userId, '| goal:', goal)
+
+    if (!userId || userId === 'undefined' || userId === 'null') {
+      return NextResponse.json({ success: false, error: 'Неверный userId' }, { status: 400 })
     }
-    
-    // Генерация пути
-    const aiData = await generatePath(goal)
-    
+
+    let aiData
+    try {
+      console.log('🤖 [CREATE] Вызов ИИ (таймаут 6с)...')
+      // Ждём ответ ИИ не дольше 6 секунд
+      aiData = await withTimeout(generatePath(goal), 6000)
+      console.log('✅ [CREATE] ИИ ответил успешно')
+    } catch (aiErr) {
+      console.warn('⚠️ [CREATE] ИИ не ответил/завис, используем шаблон:', aiErr.message)
+      // Гарантированный фолбэк, чтобы API всегда возвращал результат
+      aiData = {
+        archetype: "Созидатель",
+        archetype_meaning: "Твой уникальный путь к цели через последовательные шаги",
+        stages: [
+          { week: 1, title: "Подготовка", description: `Сформулируй первые 3 шага к цели: "${goal}"`, stat_bonus: { vision:1, craft:0, focus:1, voice:0, resilience:0, insight:0 } },
+          { week: 2, title: "Первый шаг", description: "Выполни самое простое действие из списка (15-30 мин)", stat_bonus: { vision:0, craft:1, focus:1, voice:0, resilience:1, insight:0 } },
+          { week: 3, title: "Корректировка", description: "Оцени прогресс. Что мешало? Измени план.", stat_bonus: { vision:1, craft:0, focus:0, voice:0, resilience:0, insight:1 } },
+          { week: 4, title: "Завершение", description: "Доведи начатое до конца и зафиксируй результат", stat_bonus: { vision:0, craft:1, focus:0, voice:1, resilience:1, insight:0 } }
+        ]
+      }
+    }
+
     if (!aiData?.stages?.length) {
-      return NextResponse.json(
-        { success: false, error: 'ИИ не сгенерировал квесты' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'Нет данных для генерации пути' }, { status: 400 })
     }
-    
-    // Создание пути (RLS bypassed)
+
+    console.log('📝 [CREATE] Вставка пути в БД...')
     const { data: path, error: pathError } = await supabaseAdmin
       .from('paths')
-      .insert({
-        user_id: userId,
-        title: goal,
-        archetype: aiData.archetype,
-        archetype_meaning: aiData.archetype_meaning
+      .insert({ 
+        user_id: userId, 
+        title: goal, 
+        archetype: aiData.archetype, 
+        archetype_meaning: aiData.archetype_meaning 
       })
       .select()
       .single()
-    
+
     if (pathError) {
-      console.error('[API] Ошибка пути:', pathError)
-      return NextResponse.json(
-        { success: false, error: pathError.message },
-        { status: 400 }
-      )
+      console.error('❌ [CREATE] Ошибка пути:', pathError)
+      return NextResponse.json({ success: false, error: pathError.message }, { status: 500 })
     }
-    
-    // Создание квестов
-    const questsToInsert = (aiData.stages || []).map((s, i) => ({
+
+    const questsToInsert = aiData.stages.map((s, i) => ({
       path_id: path.id,
       title: s.title,
       description: s.description,
@@ -64,26 +78,21 @@ export async function POST(request) {
       stat_bonus: s.stat_bonus || { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 }
     }))
 
-    if (questsToInsert.length > 0) {
-      const { error: questsError } = await supabaseAdmin.from('quests').insert(questsToInsert)
-      if (questsError) {
-        console.error('[API] Ошибка квестов:', questsError)
-        await supabaseAdmin.from('paths').delete().eq('id', path.id)
-        return NextResponse.json(
-          { success: false, error: questsError.message },
-          { status: 400 }
-        )
-      }
+    console.log('📋 [CREATE] Вставка квестов:', questsToInsert.length, 'шт.')
+    const { error: questsError } = await supabaseAdmin.from('quests').insert(questsToInsert)
+
+    if (questsError) {
+      console.error('❌ [CREATE] Ошибка квестов:', questsError)
+      // Откат: удаляем путь, если квесты не встали
+      await supabaseAdmin.from('paths').delete().eq('id', path.id)
+      return NextResponse.json({ success: false, error: questsError.message }, { status: 500 })
     }
-    
-    console.log('[API] Путь создан:', path.id)
+
+    console.log('🎉 [CREATE] Успех! pathId:', path.id)
     return NextResponse.json({ success: true, pathId: path.id })
-    
+
   } catch (error) {
-    console.error('[API] Ошибка:', error)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    )
+    console.error('💥 [CREATE] Критическая ошибка:', error)
+    return NextResponse.json({ success: false, error: error.message || 'Внутренняя ошибка' }, { status: 500 })
   }
 }
