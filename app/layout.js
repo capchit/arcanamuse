@@ -3,28 +3,26 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/db'
 import BottomNav from '@/components/BottomNav'
-import './globals.css'  // 👈 Убедись, что CSS импортируется!
+import './globals.css'
 
 export default function RootLayout({ children }) {
   const [isReady, setIsReady] = useState(false)
 
- useEffect(() => {
-  // Слушатель изменений аутентификации
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    console.log('🔄 [AUTH] State changed:', event, session?.user?.id)
+  useEffect(() => {
+    // 👇 СРАЗУ помечаем что приложение готово
+    setIsReady(true)
     
-    if (event === 'SIGNED_IN') {
-      console.log('✅ [AUTH] User signed in:', session.user.id)
-    } else if (event === 'SIGNED_OUT') {
-      console.log('👋 [AUTH] User signed out')
+    // Слушатель изменений аутентификации (для логов)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔄 [AUTH] State changed:', event, session?.user?.id)
+    })
+
+    return () => {
+      subscription.unsubscribe()
     }
-  })
+  }, [])
 
-  return () => {
-    subscription.unsubscribe()
-  }
-}, [])
-
+  // Если не готов — показываем спиннер
   if (!isReady) {
     return (
       <html lang="ru">
@@ -35,14 +33,13 @@ export default function RootLayout({ children }) {
     )
   }
 
+  // 👇 Приложение готово — рендерим контент
   return (
     <html lang="ru">
       <body className="min-h-screen bg-slate-950 text-white">
-        {/* 👇 Добавь pb-20 ТОЛЬКО если есть навигация */}
         <div className="pb-20">
           {children}
         </div>
-        
         <BottomNav />
       </body>
     </html>
