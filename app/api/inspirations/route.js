@@ -33,26 +33,24 @@ export async function GET(request) {
 // POST: сохранение нового
 export async function POST(request) {
   try {
-    const { userId, title, quote, content, archetype, archetype_meaning, visual, action, tags } = await request.json()
+    const { userId, title, archetype, quote, archetype_meaning, visual, action } = await request.json()
 
-    console.log('📥 [API POST] Received:', { userId, title, archetype })
+    console.log('📥 [API POST] Received:', { userId, archetype })
 
-    if (!userId || !title) {
-      return NextResponse.json({ error: 'userId и title обязательны' }, { status: 400 })
+    if (!userId) {
+      return NextResponse.json({ error: 'userId обязателен' }, { status: 400 })
     }
 
-    // 👇 Используем ПРАВИЛЬНЫЕ имена колонок из твоей БД
+    // 👇 Используем ТОЛЬКО существующие колонки!
     const { data, error } = await supabaseAdmin
       .from('inspiration_history')
       .insert({
         user_id: userId,
-        title: title,
-        quote: quote || content || '',  // ← Колонка называется 'quote'!
-        archetype: archetype || null,
+        archetype: archetype || title || 'Новое вдохновение',  // ← Используем archetype вместо title
+        quote: quote || '',
         archetype_meaning: archetype_meaning || null,
         visual: visual || null,
         action: action || null,
-        // data: tags || [],  // ← Если нужно сохранить теги в поле 'data'
         created_at: new Date().toISOString()
       })
       .select()

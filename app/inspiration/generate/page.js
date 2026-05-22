@@ -26,9 +26,8 @@ const saveInspiration = async (userId, cardData) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
-        title: cardData.archetype || 'Новое вдохновение',
-        quote: cardData.question || cardData.quote || '',  // ← Передаём 'quote'
-        archetype: cardData.archetype,
+        archetype: cardData.archetype || 'Новое вдохновение',  // ← Передаём archetype
+        quote: cardData.question || cardData.quote || '',
         archetype_meaning: cardData.archetype_hint,
         visual: cardData.visual,
         action: cardData.action,
