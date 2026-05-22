@@ -20,14 +20,31 @@ export default function CreatePathPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  const getUserId = async () => {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) {
-      router.push('/login')
-      return null
-    }
-    return user.id
+ const getUserId = async () => {
+  console.log('🔐 [AUTH] Getting current user...')
+  
+  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  if (error) {
+    console.error('❌ [AUTH] Error:', error)
+    router.push('/login')
+    return null
   }
+  
+  if (!user) {
+    console.warn('⚠️ [AUTH] No user found, redirecting to login')
+    router.push('/login')
+    return null
+  }
+  
+  console.log('✅ [AUTH] Current user:', {
+    id: user.id,
+    email: user.email,
+    aud: user.aud
+  })
+  
+  return user.id
+}
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const removeQuest = (idx) => setQuests(quests.filter((_, i) => i !== idx))
@@ -49,41 +66,44 @@ export default function CreatePathPage() {
     } finally { setEnhancing(null) }
   }
 
-  // ✅ ИСПРАВЛЕНО: Убрали router.refresh(), добавили блокировку повторных кликов
-  const handleCreateAI = async () => {
-    if (!goal.trim() || loading) return
-    setLoading(true)
-    
-    try {
-      const userId = await getUserId()
-      if (!userId) { setLoading(false); return }
-      
-      console.log('📡 [CLIENT] Вызов API /api/paths/create...')
-      
-      const response = await fetch('/api/paths/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, goal: goal.trim() })
-      })
-      
-      const result = await response.json()
-      console.log('📥 [CLIENT] Ответ от API:', result)
-      
-      if (result.success && result.pathId) {
-        console.log('✅ [CLIENT] Путь создан! Переход на:', `/my-path?pathId=${result.pathId}`)
-        // 👇 ТОЛЬКО push, без refresh — он мешает навигации
-        router.push(`/my-path?pathId=${result.pathId}`)
-      } else {
-        console.error('❌ [CLIENT] Ошибка:', result.error)
-        alert('Ошибка: ' + result.error)
-      }
-    } catch (e) {
-      console.error('💥 [CLIENT] Исключение:', e)
-      alert('Ошибка сети: ' + e.message)
-    } finally {
+const handleCreateAI = async () => {
+  if (!goal.trim() || loading) return
+  setLoading(true)
+  
+  try {
+    const userId = await getUserId()
+    if (!userId) { 
+      console.error('❌ [CREATE] userId is null!')
       setLoading(false)
+      return 
     }
+    
+    console.log('📡 [CREATE] Creating path with userId:', userId)
+    console.log('📡 [CREATE] Goal:', goal)
+    
+    const response = await fetch('/api/paths/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, goal: goal.trim() })
+    })
+    
+    const result = await response.json()
+    console.log('📥 [CREATE] API response:', result)
+    
+    if (result.success && result.pathId) {
+      console.log('✅ [CREATE] Path created! Redirecting...')
+      router.push(`/my-path?pathId=${result.pathId}`)
+    } else {
+      console.error('❌ [CREATE] Error:', result.error)
+      alert('Ошибка: ' + result.error)
+    }
+  } catch (e) {
+    console.error('💥 [CREATE] Exception:', e)
+    alert('Ошибка: ' + e.message)
+  } finally {
+    setLoading(false)
   }
+}
 
   // ✅ ИСПРАВЛЕНО: Используем API вместо Server Action
   const handleCreateManual = async () => {

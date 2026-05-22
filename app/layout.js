@@ -8,13 +8,22 @@ import './globals.css'  // 👈 Убедись, что CSS импортируе�
 export default function RootLayout({ children }) {
   const [isReady, setIsReady] = useState(false)
 
-  useEffect(() => {
-    const init = async () => {
-      await supabase.auth.getSession()
-      setIsReady(true)
+ useEffect(() => {
+  // Слушатель изменений аутентификации
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    console.log('🔄 [AUTH] State changed:', event, session?.user?.id)
+    
+    if (event === 'SIGNED_IN') {
+      console.log('✅ [AUTH] User signed in:', session.user.id)
+    } else if (event === 'SIGNED_OUT') {
+      console.log('👋 [AUTH] User signed out')
     }
-    init()
-  }, [])
+  })
+
+  return () => {
+    subscription.unsubscribe()
+  }
+}, [])
 
   if (!isReady) {
     return (
