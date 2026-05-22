@@ -7,48 +7,77 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 )
 
-// GET - загрузка списка путей
-export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-    
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'userId required' }, { status: 400 })
+// 👇 ФУНКЦИЯ ПЕРЕСЧЁТА ВНУТРИ ФАЙЛА (чтобы избежать ошибок импорта)
+async function recalculateUserStats(userId) {
+  console.log('🔁 [RECALC] Start for:', userId)
+  
+  const { data: quests, error: qErr } = await supabaseAdmin
+    .from('quests')
+    .select('stat_bonus, paths!inner(user_id)')
+    .eq('paths.user_id', userId)
+    .eq('status', 'completed')
+
+  if (qErr) { console.error('[RECALC] Quests fetch error:', qErr); return }
+
+  const totals = { vision: 0, craft: 0, focus: 0, voice: 0, resilience: 0, insight: 0 }
+  
+  if (quests) {
+    for (const q of quests) {
+      try {
+        const b = typeof q.stat_bonus === 'string' ? JSON.parse(q.stat_bonus) : q.stat_bonus
+        if (b) {
+          for (const [k, v] of Object.entries(b)) {
+            if (totals.hasOwnProperty(k)) totals[k] += (typeof v === 'number' ? v : 0)
+          }
+        }
+      } catch (e) { console.warn('[RECALC] Parse err:', e) }
     }
-    
-    const { data: paths, error } = await supabaseAdmin
-      .from('paths')
-      .select(`
-        id, title, archetype, status, created_at,
-        quests (status)
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    
-    const pathsWithCounts = paths.map(p => ({
-      ...p,
-      completed_count: (p.quests || []).filter(q => q.status === 'completed').length,
-      total_count: (p.quests || []).length
-    }))
-    
-    return NextResponse.json({ success: true, paths: pathsWithCounts })
-  } catch (error) {
-    console.error('[API GET paths] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+  console.log('[RECALC] Totals:', totals)
+
+  await supabaseAdmin.from('user_stats').delete().eq('user_id', userId)
+  
+  const toInsert = Object.entries(totals).filter(([_, v]) => v > 0)
+    .map(([stat_name, value]) => ({ user_id: userId, stat_name, value }))
+
+  if (toInsert.length > 0) {
+    const { error: iErr } = await supabaseAdmin.from('user_stats').insert(toInsert)
+    if (iErr) console.error('[RECALC] Insert error:', iErr)
+    else console.log('[RECALC] ✅ Inserted:', toInsert.length, 'stats')
   }
 }
 
-// DELETE - удаление пути
+// === GET: Список путей ===
+export async function GET(request) {
+  const { searchParams } = new URL(request.url)
+  const userId = searchParams.get('userId')
+  if (!userId) return NextResponse.json({ success: false, error: 'userId required' }, { status: 400 })
+
+  const { data: paths, error } = await supabaseAdmin
+    .from('paths')
+    .select('id, title, archetype, status, created_at, quests(status)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+
+  const pathsWithCounts = paths.map(p => ({
+    ...p,
+    completed_count: (p.quests || []).filter(q => q.status === 'completed').length,
+    total_count: (p.quests || []).length
+  }))
+
+  return NextResponse.json({ success: true, paths: pathsWithCounts })
+}
+
+// === DELETE: Удаление пути ===
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url)
     const pathId = searchParams.get('pathId')
-    
     if (!pathId) return NextResponse.json({ error: 'pathId required' }, { status: 400 })
 
+    // 1. Узнаём владельца перед удалением
     const { data: pathData } = await supabaseAdmin
       .from('paths')
       .select('user_id')
@@ -59,44 +88,16 @@ export async function DELETE(request) {
 
     const userId = pathData.user_id
 
-    // Удаляем квесты и путь
+    // 2. Удаляем квесты и путь
     await supabaseAdmin.from('quests').delete().eq('path_id', pathId)
     await supabaseAdmin.from('paths').delete().eq('id', pathId)
-    
-    // 👇 Пересчитываем статы после удаления
+
+    // 3. Пересчитываем статы после удаления
     await recalculateUserStats(userId)
 
     return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('[API DELETE] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-async function recalculateStats(userId) {
-  const { data: quests } = await supabaseAdmin
-    .from('quests')
-    .select('stat_bonus, paths!inner(user_id)')
-    .eq('paths.user_id', userId)
-    .eq('status', 'completed')
-
-  if (!quests) return
-  
-  const totals = {}
-  for (const q of quests || []) {
-    const bonuses = typeof q.stat_bonus === 'string' ? JSON.parse(q.stat_bonus) : q.stat_bonus
-    if (bonuses) {
-      for (const [key, val] of Object.entries(bonuses)) {
-        totals[key] = (totals[key] || 0) + val
-      }
-    }
-  }
-  
-  await supabaseAdmin.from('user_stats').delete().eq('user_id', userId)
-  const statsToInsert = Object.entries(totals).map(([stat_name, value]) => ({ 
-    user_id: userId, stat_name, value 
-  }))
-  if (statsToInsert.length > 0) {
-    await supabaseAdmin.from('user_stats').insert(statsToInsert)
+  } catch (err) {
+    console.error('[API DELETE] Error:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
