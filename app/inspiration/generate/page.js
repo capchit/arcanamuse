@@ -22,7 +22,7 @@ export default function GenerateInspirationPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000)
       
-      const response = await fetch('/api/inspirations', {
+     const response = await fetch('/api/inspiration/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
