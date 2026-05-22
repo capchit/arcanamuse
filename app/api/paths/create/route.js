@@ -1,8 +1,14 @@
 // app/api/paths/create/route.js
-// app/api/paths/route.js
-import { supabase } from '@/lib/db'
+import { createClient } from '@supabase/supabase-js'
 import { generatePath } from '@/lib/ai/generate'
 import { NextResponse } from 'next/server'
+
+// 👇 Создаём клиент с SERVICE ROLE ключом (обходит RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+)
 
 export async function POST(request) {
   try {
@@ -10,7 +16,16 @@ export async function POST(request) {
     
     console.log('[API] Создание пути для:', userId)
     
-    // 1. Генерация (с встроенным фолбэком, если нет токена)
+    // Проверка: userId должен быть валидным UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!userId || !uuidRegex.test(userId)) {
+      return NextResponse.json(
+        { success: false, error: 'Неверный userId' },
+        { status: 400 }
+      )
+    }
+    
+    // Генерация пути
     const aiData = await generatePath(goal)
     
     if (!aiData?.stages?.length) {
@@ -20,8 +35,8 @@ export async function POST(request) {
       )
     }
     
-    // 2. Создание пути
-    const { data: path, error: pathError } = await supabase
+    // Создание пути (RLS bypassed)
+    const { data: path, error: pathError } = await supabaseAdmin
       .from('paths')
       .insert({
         user_id: userId,
@@ -33,14 +48,14 @@ export async function POST(request) {
       .single()
     
     if (pathError) {
-      console.error('[API] Ошибка создания пути:', pathError)
+      console.error('[API] Ошибка пути:', pathError)
       return NextResponse.json(
         { success: false, error: pathError.message },
         { status: 400 }
       )
     }
     
-    // 3. Создание квестов
+    // Создание квестов
     const questsToInsert = (aiData.stages || []).map((s, i) => ({
       path_id: path.id,
       title: s.title,
@@ -50,11 +65,10 @@ export async function POST(request) {
     }))
 
     if (questsToInsert.length > 0) {
-      const { error: questsError } = await supabase.from('quests').insert(questsToInsert)
+      const { error: questsError } = await supabaseAdmin.from('quests').insert(questsToInsert)
       if (questsError) {
         console.error('[API] Ошибка квестов:', questsError)
-        // Откат: удаляем путь, если квесты не встали
-        await supabase.from('paths').delete().eq('id', path.id)
+        await supabaseAdmin.from('paths').delete().eq('id', path.id)
         return NextResponse.json(
           { success: false, error: questsError.message },
           { status: 400 }
@@ -62,13 +76,13 @@ export async function POST(request) {
       }
     }
     
-    console.log('[API] Путь создан успешно:', path.id)
+    console.log('[API] Путь создан:', path.id)
     return NextResponse.json({ success: true, pathId: path.id })
     
   } catch (error) {
-    console.error('[API] Критическая ошибка:', error)
+    console.error('[API] Ошибка:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Внутренняя ошибка сервера' },
+      { success: false, error: error.message },
       { status: 500 }
     )
   }
