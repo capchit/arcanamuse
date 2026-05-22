@@ -47,11 +47,7 @@ export async function DELETE(request) {
     const { searchParams } = new URL(request.url)
     const pathId = searchParams.get('pathId')
     
-    console.log('[API DELETE] Path ID:', pathId)
-
-    if (!pathId) {
-      return NextResponse.json({ error: 'pathId required' }, { status: 400 })
-    }
+    if (!pathId) return NextResponse.json({ error: 'pathId required' }, { status: 400 })
 
     const { data: pathData } = await supabaseAdmin
       .from('paths')
@@ -59,9 +55,7 @@ export async function DELETE(request) {
       .eq('id', pathId)
       .single()
 
-    if (!pathData) {
-      return NextResponse.json({ error: 'Путь не найден' }, { status: 404 })
-    }
+    if (!pathData) return NextResponse.json({ error: 'Путь не найден' }, { status: 404 })
 
     const userId = pathData.user_id
 
@@ -69,8 +63,8 @@ export async function DELETE(request) {
     await supabaseAdmin.from('quests').delete().eq('path_id', pathId)
     await supabaseAdmin.from('paths').delete().eq('id', pathId)
     
-    // Пересчет статов
-    await recalculateStats(userId)
+    // 👇 Пересчитываем статы после удаления
+    await recalculateUserStats(userId)
 
     return NextResponse.json({ success: true })
   } catch (error) {
