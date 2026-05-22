@@ -17,41 +17,43 @@ export default function GenerateInspirationPage() {
 
   // 👇 Функция сохранения через API (вместо Server Action)
   const saveInspiration = async (userId, cardData) => {
-    try {
-      // 👇 Таймаут 5 секунд для сохранения
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
-      
-     const response = await fetch('/api/inspirations/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          title: cardData.archetype || 'Новое вдохновение',
-          content: cardData.question || cardData.quote || '',
-          archetype: cardData.archetype,
-          archetype_meaning: cardData.archetype_hint,
-          visual: cardData.visual,
-          action: cardData.action,
-          tags: cardData.tags || []
-        }),
-        signal: controller.signal
+  try {
+    console.log('💾 [SAVE] === START ===')
+    console.log('💾 [SAVE] userId:', userId)
+    console.log('💾 [SAVE] cardData:', cardData)
+    
+    const response = await fetch('/api/inspirations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        title: cardData.archetype || 'Новое вдохновение',
+        content: cardData.question || cardData.quote || '',
+        archetype: cardData.archetype,
+        archetype_meaning: cardData.archetype_hint,
+        visual: cardData.visual,
+        action: cardData.action,
+        tags: cardData.tags || []
       })
-      
-      clearTimeout(timeoutId)
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        console.log('✅ [SAVE] Saved:', result.inspiration?.id)
-        return true
-      }
+    })
+
+    console.log('💾 [SAVE] Response status:', response.status)
+    
+    const result = await response.json()
+    console.log('💾 [SAVE] Result:', result)
+    
+    if (result.success) {
+      console.log('✅ [SAVE] Saved successfully! ID:', result.inspiration?.id)
+      return true
+    } else {
+      console.error('❌ [SAVE] API error:', result.error)
       return false
-    } catch (e) {
-      console.warn('⚠️ [SAVE] Failed (non-critical):', e.message)
-      return false // Не прерываем работу, если сохранение не удалось
     }
+  } catch (e) {
+    console.error('❌ [SAVE] Exception:', e)
+    return false
   }
+}
 
  const handleGenerate = async () => {
     setLoading(true)
