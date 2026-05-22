@@ -1,6 +1,6 @@
-// app/api/inspiration/generate/route.js
+// app/api/inspirations/generate/route.js
 import { NextResponse } from 'next/server'
-import { generateInspirationAction } from '@/app/actions'
+import { generateInspiration } from '@/lib/ai/generate'  // 👈 Прямой импорт из lib
 
 const withTimeout = (promise, ms) => {
   let timer
@@ -14,38 +14,33 @@ const withTimeout = (promise, ms) => {
 
 export async function POST(request) {
   try {
+    // userId нам не нужен для генерации, но можем прочитать для логов
     const { userId } = await request.json()
-    
-    if (!userId) {
-      return NextResponse.json({ error: 'userId required' }, { status: 400 })
-    }
-
-    console.log('🤖 [API] Generating inspiration for:', userId)
+    console.log('🤖 [API] Generating inspiration (userId:', userId, ')')
 
     let result
     try {
-      result = await withTimeout(generateInspirationAction(userId), 8000)
+      // 👇 Вызываем generateInspiration() БЕЗ userId
+      result = await withTimeout(generateInspiration(), 8000)
       console.log('✅ [API] AI responded')
     } catch (aiErr) {
       console.warn('⚠️ [API] AI timeout, using fallback')
+      // Фолбэк уже встроен в generateInspiration(), но на всякий случай:
       result = {
-        success: true,
-        card: {
-          archetype: "Мудрец",
-          archetype_hint: "Делится мудростью и опытом",
-          visual: "Древняя библиотека, свет свечей, открытые книги.",
-          question: "Какой урок из прошлого поможет тебе сегодня?",
-          action: "Запиши одну важную мысль в дневник.",
-          tags: ["мудрость", "рефлексия"]
-        }
+        archetype: "Мудрец",
+        archetype_hint: "Делится мудростью",
+        visual: "Древняя библиотека",
+        question: "Какой урок поможет тебе?",
+        action: "Запиши мысль в дневник",
+        stat_bonus: { vision:1, craft:0, focus:1, voice:0, resilience:0, insight:1 }
       }
     }
 
-    if (!result?.success || !result?.card) {
-      return NextResponse.json({ success: false, error: 'Не удалось сгенерировать карту' }, { status: 500 })
+    if (!result?.archetype) {
+      return NextResponse.json({ success: false, error: 'Не удалось сгенерировать' }, { status: 500 })
     }
 
-    return NextResponse.json(result)
+    return NextResponse.json({ success: true, card: result })
   } catch (error) {
     console.error('💥 [API] Error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

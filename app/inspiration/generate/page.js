@@ -2,7 +2,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { generateInspirationAction } from '@/app/actions'  // 👈 Оставляем только генерацию
+import { generateInspirationAction } from '@/app/actions'
 import { useTheme } from '@/lib/useTheme'
 import { Sparkles, ArrowLeft, Download } from 'lucide-react'
 import { toPng } from 'html-to-image'
@@ -15,41 +15,42 @@ export default function GenerateInspirationPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  // 👇 Функция сохранения через API (вместо Server Action)
- 
-const saveInspiration = async (userId, cardData) => {
-  try {
-    console.log('💾 [SAVE] Saving...')
-    
-    const response = await fetch('/api/inspirations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        archetype: cardData.archetype || 'Новое вдохновение',  // ← Передаём archetype
-        quote: cardData.question || cardData.quote || '',
-        archetype_meaning: cardData.archetype_hint,
-        visual: cardData.visual,
-        action: cardData.action,
-        tags: cardData.tags || []
+  // 👇 Функция сохранения через API
+  const saveInspiration = async (userId, cardData) => {
+    try {
+      console.log('💾 [SAVE] Saving inspiration...')
+      
+      const response = await fetch('/api/inspirations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          archetype: cardData.archetype || 'Новое вдохновение',
+          quote: cardData.question || cardData.quote || '',
+          archetype_meaning: cardData.archetype_hint,
+          visual: cardData.visual,
+          action: cardData.action,
+          tags: cardData.tags || []
+        })
       })
-    })
 
-    const result = await response.json()
-    console.log('💾 [SAVE] Result:', result)
-    
-    if (result.success) {
-      console.log('✅ [SAVE] Saved!')
-      return true
+      const result = await response.json()
+      console.log('💾 [SAVE] Result:', result)
+      
+      if (result.success) {
+        console.log('✅ [SAVE] Saved! ID:', result.inspiration?.id)
+        return true
+      } else {
+        console.warn('⚠️ [SAVE] API error:', result.error)
+        return false
+      }
+    } catch (e) {
+      console.error('❌ [SAVE] Exception:', e)
+      return false
     }
-    return false
-  } catch (e) {
-    console.error('❌ [SAVE] Exception:', e)
-    return false
   }
-}
 
- const handleGenerate = async () => {
+  const handleGenerate = async () => {
     setLoading(true)
     
     try {
@@ -62,16 +63,12 @@ const saveInspiration = async (userId, cardData) => {
         return
       }
       
-      const userId = user.id
-      console.log('🎴 Запрос генерации для userId:', userId)
-      
-      // 👇 Вызываем API вместо прямого Server Action
       console.log('📡 Вызов /api/inspirations/generate...')
       
       const response = await fetch('/api/inspirations/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ userId })  // ← Можно оставить, просто для логов
       })
       
       if (!response.ok) {
@@ -80,26 +77,34 @@ const saveInspiration = async (userId, cardData) => {
       }
       
       const result = await response.json()
-      console.log('📥 Ответ API:', result)
+      console.log('📥 API response:', result)
       
       if (!result.success) {
         throw new Error(result.error || 'Генерация не удалась')
       }
       
-      console.log('✅ Карта сгенерирована:', result.card.archetype)
+      console.log('✅ Card generated:', result.card.archetype)
       setCard(result.card)
       
-      // 👇 Авто-сохранение (не блокируем интерфейс, если не сработает)
-      console.log('💾 [AUTO] Начинаю сохранение...')
-      saveInspiration(userId, result.card).catch(err => {
-        console.warn('⚠️ [AUTO] Сохранение не удалось:', err)
-      })
+      // 👇 Авто-сохранение (в фоне, не блокируем интерфейс)
+      console.log('💾 [AUTO] Starting background save...')
+      saveInspiration(userId, result.card)
+        .then(saved => {
+          if (saved) {
+            console.log('✨ [AUTO] Saved to archive!')
+          } else {
+            console.warn('⚠️ [AUTO] Save failed, but card is shown')
+          }
+        })
+        .catch(err => {
+          console.warn('⚠️ [AUTO] Save error:', err)
+        })
       
     } catch (err) {
-      console.error('💥 Ошибка генерации:', err)
+      console.error('💥 Generation error:', err)
       alert('Не удалось сгенерировать карту: ' + err.message)
     } finally {
-      console.log('🔄 Сброс loading')
+      console.log('🔄 Reset loading')
       setLoading(false)
     }
   }
@@ -108,12 +113,18 @@ const saveInspiration = async (userId, cardData) => {
     const node = document.getElementById('inspiration-card')
     if (!node) return
     try {
-      const dataUrl = await toPng(node, { backgroundColor: isDark ? '#0f172a' : '#ffffff', quality: 1, pixelRatio: 2 })
+      const dataUrl = await toPng(node, { 
+        backgroundColor: isDark ? '#0f172a' : '#ffffff', 
+        quality: 1, 
+        pixelRatio: 2 
+      })
       const link = document.createElement('a')
       link.download = `Card_${card?.archetype}.png`
       link.href = dataUrl
       link.click()
-    } catch (e) { console.error(e) }
+    } catch (e) { 
+      console.error(e) 
+    }
   }
 
   if (typeof window === 'undefined') return null
