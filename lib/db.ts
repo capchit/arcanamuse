@@ -4,7 +4,16 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+// 👇 Создаём клиент с ПРАВИЛЬНЫМИ настройками аутентификации
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,        // Автообновление токена
+    persistSession: true,          // Сохранять сессию в localStorage
+    detectSessionInUrl: true,      // Detect session from URL (OAuth)
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined, // Явное хранилище
+    storageKey: 'supabase.auth.token', // Ключ для localStorage
+  },
+})
 
 // 🔐 Авторизация
 export async function signUp(email: string, password: string) {

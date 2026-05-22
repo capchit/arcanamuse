@@ -20,31 +20,51 @@ export default function CreatePathPage() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
- const getUserId = async () => {
-  console.log('🔐 [AUTH] Getting current user...')
-  
-  const { data: { user }, error } = await supabase.auth.getUser()
-  
-  if (error) {
-    console.error('❌ [AUTH] Error:', error)
-    router.push('/login')
-    return null
+ // app/path/page.js - замени getUserId на эту версию
+
+  const getUserId = async () => {
+    console.log('🔐 [GET USER ID] === START ===')
+    
+    try {
+      // 👇 Принудительно получаем СВЕЖУЮ сессию (не из кэша)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('❌ [GET USER ID] getSession error:', sessionError)
+        router.push('/login')
+        return null
+      }
+      
+      if (!session?.user) {
+        console.warn('⚠️ [GET USER ID] No session user, trying getUser()...')
+        
+        // Пробуем альтернативный метод
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError || !user) {
+          console.error('❌ [GET USER ID] getUser also failed:', userError)
+          router.push('/login')
+          return null
+        }
+        
+        console.log('✅ [GET USER ID] Got user via getUser():', user.id)
+        return user.id
+      }
+      
+      console.log('✅ [GET USER ID] Got user via getSession():', {
+        id: session.user.id,
+        email: session.user.email,
+        aud: session.user.aud
+      })
+      
+      return session.user.id
+      
+    } catch (e) {
+      console.error('💥 [GET USER ID] Exception:', e)
+      router.push('/login')
+      return null
+    }
   }
-  
-  if (!user) {
-    console.warn('⚠️ [AUTH] No user found, redirecting to login')
-    router.push('/login')
-    return null
-  }
-  
-  console.log('✅ [AUTH] Current user:', {
-    id: user.id,
-    email: user.email,
-    aud: user.aud
-  })
-  
-  return user.id
-}
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const removeQuest = (idx) => setQuests(quests.filter((_, i) => i !== idx))
