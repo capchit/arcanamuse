@@ -54,27 +54,44 @@ export default function CreatePathPage() {
   }
 
   const handleCreateAI = async () => {
-    if (!goal.trim()) return
-    setLoading(true)
+  if (!goal.trim()) return
+  setLoading(true)
+  
+  try {
+    console.log('🛤️ [CLIENT] Начинаем создание пути...')
     
     const userId = await getUserId()
-    if (!userId) { setLoading(false); return }
-    
-    try {
-      const res = await createNewPath(userId, goal.trim())
-      if (res.success && res.pathId) {
-        router.push(`/my-path?pathId=${res.pathId}`)
-        router.refresh()
-      } else {
-        alert('Ошибка: ' + res.error)
-      }
-    } catch (e) { 
-      console.error('❌ Ошибка создания пути с ИИ:', e)
-      alert('Ошибка: ' + e.message) 
-    } finally { 
-      setLoading(false) 
+    if (!userId) { 
+      setLoading(false)
+      return 
     }
+    
+    console.log('📡 [CLIENT] Вызов API /api/paths/create...')
+    
+    const response = await fetch('/api/paths/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, goal: goal.trim() })
+    })
+    
+    const result = await response.json()
+    console.log('📥 [CLIENT] Ответ от API:', result)
+    
+    if (result.success && result.pathId) {
+      console.log('✅ [CLIENT] Путь создан! ID:', result.pathId)
+      router.push(`/my-path?pathId=${result.pathId}`)
+      router.refresh()
+    } else {
+      console.error('❌ [CLIENT] Ошибка:', result.error)
+      alert('Ошибка: ' + result.error)
+    }
+  } catch (e) {
+    console.error('💥 [CLIENT] Исключение:', e)
+    alert('Ошибка: ' + e.message)
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleCreateManual = async () => {
     if (!title.trim() || quests.some(q => !q.title.trim())) return
