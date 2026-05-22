@@ -18,7 +18,9 @@ export default function GenerateInspirationPage() {
   // 👇 Функция сохранения через API (вместо Server Action)
   const saveInspiration = async (userId, cardData) => {
     try {
-      console.log('💾 [SAVE] Сохраняю вдохновение...', { userId, archetype: cardData.archetype })
+      // 👇 Таймаут 5 секунд для сохранения
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
       
       const response = await fetch('/api/inspirations', {
         method: 'POST',
@@ -31,88 +33,80 @@ export default function GenerateInspirationPage() {
           archetype_meaning: cardData.archetype_hint,
           visual: cardData.visual,
           action: cardData.action,
-          tags: []
-        })
+          tags: cardData.tags || []
+        }),
+        signal: controller.signal
       })
-
+      
+      clearTimeout(timeoutId)
+      
       const result = await response.json()
-      console.log('💾 [SAVE] Результат:', result)
       
       if (result.success) {
-        console.log('✅ [SAVE] Вдохновение сохранено! ID:', result.inspiration?.id)
+        console.log('✅ [SAVE] Saved:', result.inspiration?.id)
         return true
-      } else {
-        console.error('❌ [SAVE] Ошибка:', result.error)
-        return false
       }
-    } catch (e) {
-      console.error('❌ [SAVE] Exception:', e)
       return false
+    } catch (e) {
+      console.warn('⚠️ [SAVE] Failed (non-critical):', e.message)
+      return false // Не прерываем работу, если сохранение не удалось
     }
   }
 
  const handleGenerate = async () => {
-  setLoading(true)
-  
-  try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    setLoading(true)
     
-    if (authError || !user) {
-      console.error('❌ Auth error:', authError)
-      alert('❌ Сначала войдите в систему!')
-      router.push('/login')
-      setLoading(false)
-      return
-    }
-    
-    const userId = user.id
-    console.log('🎴 Генерация для userId:', userId)
-    
-    // 👇 Добавляем таймаут 15 секунд
-    const generatePromise = generateInspirationAction(userId)
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Превышено время ожидания генерации (15 сек)')), 15000)
-    })
-    
-    const result = await Promise.race([generatePromise, timeoutPromise])
-    
-    if (!result) {
-      console.error('❌ Result is null/undefined')
-      alert('Ошибка: генерация не вернула результат')
-      setLoading(false)
-      return
-    }
-    
-    if (!result.success) {
-      console.error('❌ Generation failed:', result.error)
-      alert('Ошибка генерации: ' + result.error)
-      setLoading(false)
-      return
-    }
-    
-    console.log('✅ Карта сгенерирована:', result.card)
-    setCard(result.card)
-    
-    // Сохранение
-    console.log('💾 [AUTO] Начинаю авто-сохранение...')
     try {
-      const saved = await saveInspiration(userId, result.card)
-      if (saved) {
-        console.log('✨ [AUTO] Вдохновение сохранено!')
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        alert('❌ Сначала войдите в систему!')
+        router.push('/login')
+        setLoading(false)
+        return
       }
-    } catch (saveErr) {
-      console.warn('⚠️ [AUTO] Ошибка сохранения:', saveErr)
-      // Не прерываем процесс, если сохранение не удалось
+      
+      const userId = user.id
+      console.log('🎴 Запрос генерации для userId:', userId)
+      
+      // 👇 Вызываем API вместо прямого Server Action
+      console.log('📡 Вызов /api/inspiration/generate...')
+      
+      const response = await fetch('/api/inspiration/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+      
+      const result = await response.json()
+      console.log('📥 Ответ API:', result)
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Генерация не удалась')
+      }
+      
+      console.log('✅ Карта сгенерирована:', result.card.archetype)
+      setCard(result.card)
+      
+      // 👇 Авто-сохранение (не блокируем интерфейс, если не сработает)
+      console.log('💾 [AUTO] Начинаю сохранение...')
+      saveInspiration(userId, result.card).catch(err => {
+        console.warn('⚠️ [AUTO] Сохранение не удалось:', err)
+      })
+      
+    } catch (err) {
+      console.error('💥 Ошибка генерации:', err)
+      alert('Не удалось сгенерировать карту: ' + err.message)
+    } finally {
+      console.log('🔄 Сброс loading')
+      setLoading(false)
     }
-    
-  } catch (err) {
-    console.error('💥 Ошибка в handleGenerate:', err)
-    alert('Произошла ошибка: ' + err.message)
-  } finally {
-    console.log('🔄 Reset loading state')
-    setLoading(false)
   }
-}
 
   const handleDownload = async () => {
     const node = document.getElementById('inspiration-card')
