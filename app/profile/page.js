@@ -74,22 +74,17 @@ export default function ProfilePage() {
     loadProfile()
   }, [router])
 
-  const loadProfile = async () => {
+  const loadProfile = async (uid) => {
     try {
-      // 👇 Получаем текущего пользователя из Supabase
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      console.log('📊 Loading profile for:', uid)
       
-      if (authError || !user) {
-        console.warn('⚠️ Пользователь не авторизован')
-        router.push('/login')
-        return
-      }
+      const response = await fetch(`/api/profile/stats?userId=${uid}`)
+      const data = await response.json()
       
-      const userId = user.id  // 👈 UUID строка
-      const statsData = await getUserStats(userId)
-      setStats(statsData)
+      console.log('📊 Profile data:', data)
+      setStats(data)
     } catch (e) {
-      console.error('❌ Ошибка загрузки профиля:', e)
+      console.error('❌ Error loading profile:', e)
     } finally {
       setLoading(false)
     }

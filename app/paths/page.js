@@ -41,29 +41,53 @@ export default function PathsPage() {
     }
   }
 
-  const handleDeletePath = async (e, pathId) => {
+   const handleDeletePath = async (e, pathId) => {
     e.stopPropagation()
-    if (confirm('Удалить этот путь и всю его историю? Очки будут откатываться.')) {
-      try {
-        await deletePath(pathId)
-        loadPaths()  // Перезагружаем список
-      } catch (err) {
-        console.error('❌ Ошибка удаления пути:', err)
-        alert('Не удалось удалить путь')
+    if (!confirm('Удалить этот путь и всю его историю?')) return
+    
+    try {
+      console.log('🗑️ Deleting path:', pathId)
+      
+      const response = await fetch(`/api/paths/${pathId}`, {
+        method: 'DELETE'
+      })
+      
+      const result = await response.json()
+      console.log('🗑️ Delete result:', result)
+      
+      if (result.success) {
+        loadPaths() // 👈 Здесь loadPaths() — правильная функция для этого компонента
+      } else {
+        alert('Ошибка: ' + result.error)
       }
+    } catch (err) {
+      console.error('❌ Delete error:', err)
+      alert('Не удалось удалить путь')
     }
   }
-  
+
   const handleRestorePath = async (e, pathId) => {
     e.stopPropagation()
-    if (confirm('♻️ Вернуть этот путь в активные?\nКвесты останутся выполненными, но путь снова станет доступным.')) {
-      try {
-        await restorePath(pathId)
+    if (!confirm('♻️ Вернуть этот путь в активные?')) return
+    
+    try {
+      console.log('♻️ Restoring path:', pathId)
+      
+      const response = await fetch(`/api/paths/${pathId}/restore`, {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      console.log('♻️ Restore result:', result)
+      
+      if (result.success) {
         loadPaths()
-      } catch (err) {
-        console.error('❌ Ошибка восстановления пути:', err)
-        alert('Не удалось восстановить путь')
+      } else {
+        alert('Ошибка: ' + result.error)
       }
+    } catch (err) {
+      console.error('❌ Restore error:', err)
+      alert('Не удалось восстановить путь')
     }
   }
 

@@ -32,7 +32,6 @@ export default function MyPathContent({ pathId }) {
       
       const userId = user.id
       
-      // 👇 Загружаем путь через API (не через Server Action)
       const response = await fetch(`/api/paths/${pathId || 'active'}?userId=${userId}`)
       const data = await response.json()
       
@@ -48,46 +47,40 @@ export default function MyPathContent({ pathId }) {
     }
   }
 
- const handleToggleQuest = async (questId, isCurrentlyCompleted) => {
-  const newStatus = !isCurrentlyCompleted
-  
-  console.log('🔄 Toggle quest:', questId, 'to:', newStatus ? 'completed' : 'pending')
-  
-  try {
-    // Оптимистичное обновление
-    setPath(prev => ({
-      ...prev,
-      quests: prev.quests.map(q => 
-        q.id === questId ? { ...q, status: newStatus ? 'completed' : 'pending' } : q
-      )
-    }))
+  const handleToggleQuest = async (questId, isCurrentlyCompleted) => {
+    const newStatus = !isCurrentlyCompleted
+    
+    console.log('🔄 Toggle quest:', questId, 'to:', newStatus ? 'completed' : 'pending')
+    
+    try {
+      // Оптимистичное обновление
+      setPath(prev => ({
+        ...prev,
+        quests: prev.quests.map(q => 
+          q.id === questId ? { ...q, status: newStatus ? 'completed' : 'pending' } : q
+        )
+      }))
 
-    const response = await fetch('/api/quests/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        questId, 
-        isCompleted: newStatus 
+      const response = await fetch('/api/quests/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questId, isCompleted: newStatus })
       })
-    })
-    
-    console.log('📥 Response:', response.status)
-    const result = await response.json()
-    console.log('📥 Result:', result)
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to toggle quest')
+      
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to toggle quest')
+      }
+      
+      await loadPath() // Перезагружаем для актуальных данных
+      
+    } catch (error) {
+      console.error('❌ Error toggling quest:', error)
+      alert('Не удалось обновить квест: ' + error.message)
+      loadPath() // Откат
     }
-    
-    // Перезагружаем для актуальных данных
-    await loadPath()
-    
-  } catch (error) {
-    console.error('❌ Error toggling quest:', error)
-    alert('Не удалось обновить квест: ' + error.message)
-    loadPath() // Откат
   }
-}
 
   const handleFinishPath = async () => {
     if (!confirm('🏁 Завершить этот путь? Он переместится в историю подвигов.')) return
@@ -112,9 +105,9 @@ export default function MyPathContent({ pathId }) {
     }
   }
 
-  if (typeof window === 'undefined') {
-    return null
-  }
+  // 👇 УДАЛЕНО: handleDeletePath и handleRestorePath — они принадлежат в app/paths/page.js
+
+  if (typeof window === 'undefined') return null
 
   if (loading) {
     return (
@@ -138,7 +131,6 @@ export default function MyPathContent({ pathId }) {
     )
   }
 
-  // Подсчет прогресса
   const total = path.quests?.length || 0
   const completed = path.quests?.filter(q => q.status === 'completed').length || 0
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0
