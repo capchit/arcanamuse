@@ -75,24 +75,30 @@ function EditPathContent() {
     } finally { setEnhancingIdx(null) }
   }
 
-  const handleSave = async () => {
-    if (!title.trim()) return alert('Введите название пути')
-    if (quests.some(q => !q.title.trim())) return alert('Все квесты должны иметь название')
+ const handleSave = async () => {
+  if (!title.trim()) return alert('Введите название пути')
+  
+  setSaving(true)
+  try {
+    const response = await fetch('/api/paths/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pathId, title, quests })
+    })
     
-    setSaving(true)
-    try {
-      const res = await updatePathFull(pathId, title, quests)
-      if (res.success) {
-        router.push(`/my-path?pathId=${pathId}`)
-        router.refresh()
-      } else {
-        alert('Ошибка сохранения: ' + res.error)
-      }
-    } catch (e) {
-      console.error('❌ Ошибка сохранения:', e)
-      alert('Ошибка: ' + e.message)
-    } finally { setSaving(false) }
+    const result = await response.json()
+    if (result.success) {
+      router.push(`/my-path?pathId=${pathId}`)
+      router.refresh()
+    } else {
+      alert('Ошибка сохранения: ' + result.error)
+    }
+  } catch (err) {
+    alert('Произошла ошибка при сохранении')
+  } finally {
+    setSaving(false)
   }
+}
 
   const addQuest = () => setQuests([...quests, { title: '', description: '', stat_bonus: { vision:0, craft:0, focus:0, voice:0, resilience:0, insight:0 } }])
   const removeQuest = (idx) => setQuests(quests.filter((_, i) => i !== idx))

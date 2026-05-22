@@ -2,11 +2,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getUserStats, resetUserProgress, handleLogout } from '@/app/actions'
-import { ArrowLeft, Settings, LogOut, Moon, Sun, Download, ImagePlus, Trash2, MessageSquare } from 'lucide-react'
+import { resetUserProgress } from '@/app/actions'  // 👈 handleLogout и getUserStats больше не нужны
+import { ArrowLeft, Settings, LogOut, Moon, Sun, Download, ImagePlus, MessageSquare } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { useTheme } from '@/lib/useTheme'
-import { supabase } from '@/lib/db'  // 👈 Добавь этот импорт
+import { supabase } from '@/lib/db'
 
 const STAT_NAMES = { vision: 'Видение', craft: 'Мастерство', focus: 'Фокус', voice: 'Голос', resilience: 'Стойкость', insight: 'Озарение' }
 
@@ -58,7 +58,7 @@ export default function ProfilePage() {
   const [isCustomAvatar, setIsCustomAvatar] = useState(false)
 
   useEffect(() => {
-    // 👇 Аватар можно хранить в lS (это предпочтение пользователя)
+    // Аватар из localStorage (это ок)
     const savedAvatar = localStorage.getItem('avatar')
     if (savedAvatar) {
       if (savedAvatar.startsWith('data:')) {
@@ -70,17 +70,33 @@ export default function ProfilePage() {
       }
     }
     
-    // 👇 Но userId получаем из Supabase Auth!
+    // 👇 Загружаем профиль (userId получаем внутри функции)
     loadProfile()
-  }, [router])
+  }, [])
 
-  const loadProfile = async (uid) => {
+  // 👇 ИСПРАВЛЕНО: функция сама получает userId, не ждёт параметр
+  const loadProfile = async () => {
     try {
-      console.log('📊 Loading profile for:', uid)
+      // 1. Получаем текущего пользователя
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
       
-      const response = await fetch(`/api/profile/stats?userId=${uid}`)
+      if (authError || !user) {
+        console.warn('⚠️ Пользователь не авторизован в профиле')
+        return
+      }
+      
+      const userId = user.id
+      console.log('📊 Loading profile for:', userId)
+      
+      // 2. Запрашиваем статы через API
+      const response = await fetch(`/api/profile/stats?userId=${userId}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch stats')
+      }
+      
       const data = await response.json()
-      
       console.log('📊 Profile data:', data)
       setStats(data)
     } catch (e) {
@@ -91,7 +107,6 @@ export default function ProfilePage() {
   }
 
   const handleLogout = async () => {
-    // 👇 Используем Supabase signOut (не lS!)
     await supabase.auth.signOut()
     router.push('/')
     router.refresh()
@@ -117,7 +132,7 @@ export default function ProfilePage() {
         const base64 = reader.result
         setAvatar(base64)
         setIsCustomAvatar(true)
-        localStorage.setItem('avatar', base64)  // 👈 Аватар можно хранить в localStorage
+        localStorage.setItem('avatar', base64)
       }
       reader.readAsDataURL(file)
     }
@@ -130,8 +145,8 @@ export default function ProfilePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       
-      await resetUserProgress(user.id)  // 👈 Передаём UUID
-      loadProfile()  // Перезагружаем профиль
+      await resetUserProgress(user.id)
+      await loadProfile()  // Перезагружаем профиль после сброса
       alert('Прогресс сброшен! 🚀')
     } catch (e) {
       console.error('❌ Ошибка сброса:', e)
@@ -139,10 +154,8 @@ export default function ProfilePage() {
     }
   }
 
-  // Защита: рендерим только в браузере
-  if (typeof window === 'undefined') {
-    return null
-  }
+  // Защита от SSR
+  if (typeof window === 'undefined') return null
   
   if (loading) {
     return (
@@ -155,7 +168,8 @@ export default function ProfilePage() {
   if (!stats) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white">
-        Ошибка загрузки
+        Ошибка загрузки профиля
+        <button onClick={() => loadProfile()} className="ml-4 px-4 py-2 bg-purple-500 rounded-xl">Повторить</button>
       </div>
     )
   }
@@ -181,7 +195,7 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* === НАСТРОЙКИ (выпадающие) === */}
+        {/* === НАСТРОЙКИ === */}
         {showSettings && (
           <div className={`${cardClass} backdrop-blur-xl border rounded-3xl p-6 space-y-5 animate-in fade-in slide-in-from-top-4`}>
             <div className="flex items-center justify-between">
@@ -220,7 +234,7 @@ export default function ProfilePage() {
               🔄 Сбросить весь прогресс
             </button>
 
-            {/* ✅ КНОПКА ОБРАТНОЙ СВЯЗИ */}
+            {/* Обратная связь */}
             <a 
               href="https://docs.google.com/forms/d/1yPF9GihuJg-YcUAOMh7DB2WLWqdN4PxUX1cla1iZc0I/viewform" 
               target="_blank" 
@@ -269,7 +283,7 @@ export default function ProfilePage() {
             <h3 className={`text-sm font-semibold ${textSecondary} mb-4`}>✨ Характеристики</h3>
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(STATS_CONFIG).map(([key, { color }]) => (
-                <CircularStat key={key} label={key} value={stats.stats[key] || 0} color={color} isDark={isDark} />
+                <CircularStat key={key} label={key} value={stats.stats?.[key] || 0} color={color} isDark={isDark} />
               ))}
             </div>
           </div>
