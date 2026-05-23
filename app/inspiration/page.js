@@ -83,7 +83,7 @@ export default function InspirationsPage() {
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900' : 'bg-gradient-to-br from-gray-100 via-white to-gray-200'} pb-24`}>
+    <div className={`min-h-screen pb-24 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
       <div className="max-w-md mx-auto px-4 pt-6">
         
         {/* Шапка */}
