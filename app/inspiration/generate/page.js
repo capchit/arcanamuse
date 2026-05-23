@@ -7,6 +7,18 @@ import { Sparkles, ArrowLeft, Download } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { supabase } from '@/lib/db'
 
+// 👇 ДОБАВЬ ЭТИ КОНСТАНТЫ:
+const STAT_ICONS = { vision: Eye, craft: Zap, focus: Target, voice: Mic, resilience: Shield, insight: Lightbulb }
+const STAT_NAMES = { vision: 'Видение', craft: 'Мастерство', focus: 'Фокус', voice: 'Голос', resilience: 'Стойкость', insight: 'Озарение' }
+const STAT_COLORS = { 
+  vision: 'text-blue-400 bg-blue-500/20', 
+  craft: 'text-amber-400 bg-amber-500/20', 
+  focus: 'text-purple-400 bg-purple-500/20', 
+  voice: 'text-pink-400 bg-pink-500/20', 
+  resilience: 'text-emerald-400 bg-emerald-500/20', 
+  insight: 'text-orange-400 bg-orange-500/20' 
+}
+
 export default function GenerateInspirationPage() {
   const [loading, setLoading] = useState(false)
   const [card, setCard] = useState(null)
