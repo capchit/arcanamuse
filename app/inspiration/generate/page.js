@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/lib/useTheme'
-import { Sparkles, ArrowLeft, Download } from 'lucide-react'
+import { Sparkles, ArrowLeft, Download, Eye, Zap, Target, Mic, Shield, Lightbulb } from 'lucide-react'  // 👈 ДОБАВЬ ВСЕ ИКОНКИ!
 import { toPng } from 'html-to-image'
 import { supabase } from '@/lib/db'
 
