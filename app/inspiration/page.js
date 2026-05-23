@@ -138,13 +138,6 @@ export default function InspirationsPage() {
                   </div>
                   <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <button 
-                      onClick={() => handleView(insp.id)}
-                      className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-purple-400`}
-                      title="Просмотр"
-                    >
-                      <Eye size={16} />
-                    </button>
-                    <button 
                       onClick={() => handleDelete(insp.id)}
                       className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-red-400`}
                       title="Удалить"
