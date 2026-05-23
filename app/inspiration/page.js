@@ -119,7 +119,11 @@ export default function InspirationsPage() {
             {inspirations.map(insp => (
               <div 
                 key={insp.id}
-                className={`p-5 rounded-2xl border transition-all hover:scale-[1.02] ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-200 shadow-sm'}`}
+                // 👇 Делаем всю карточку кликабельной
+                onClick={() => router.push(`/inspiration/view?id=${insp.id}`)}
+                className={`p-5 rounded-2xl border transition-all hover:scale-[1.02] cursor-pointer ${
+                  isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-200 shadow-sm'
+                }`}
               >
                 <div className="flex justify-between items-start mb-3">
                   <div>
@@ -132,7 +136,7 @@ export default function InspirationsPage() {
                       {insp.archetype || 'Вдохновение'}
                     </h3>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <button 
                       onClick={() => handleView(insp.id)}
                       className={`p-2 rounded-lg ${isDark ? 'hover:bg-white/10' : 'hover:bg-gray-100'} text-purple-400`}
