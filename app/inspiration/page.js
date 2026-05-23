@@ -88,9 +88,6 @@ export default function InspirationsPage() {
         
         {/* Шапка */}
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => router.back()} className={`p-2 rounded-xl ${isDark ? 'bg-white/5 text-gray-400' : 'bg-white text-gray-600 shadow'}`}>
-            <ArrowLeft size={20} />
-          </button>
           <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>✨ Архив вдохновений</h1>
           <button 
             onClick={() => router.push('/inspiration/generate')}

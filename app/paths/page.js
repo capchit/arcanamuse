@@ -108,6 +108,12 @@ const handleDeletePath = async (e, pathId) => {
         <h1 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
           🗺️ Мои Пути
         </h1>
+        <button 
+            onClick={() => router.push('/path')}
+            className="px-4 py-2 rounded-xl bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-all"
+          >
+            + Создать
+          </button>
 
         {/* Активные пути */}
         <div className="mb-8">
