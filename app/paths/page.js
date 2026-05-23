@@ -105,7 +105,8 @@ const handleDeletePath = async (e, pathId) => {
   return (
     <div className={`min-h-screen pb-24 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
       <div className="max-w-md mx-auto px-4 pt-6">
-        <h1 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+       <div className="flex items-center justify-between mb-6">
+          <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
           🗺️ Мои Пути
         </h1>
         <button 
@@ -114,7 +115,7 @@ const handleDeletePath = async (e, pathId) => {
           >
             + Создать
           </button>
-
+        </div>
         {/* Активные пути */}
         <div className="mb-8">
           <h2 className="text-sm font-semibold uppercase tracking-wider mb-4 text-purple-400">Активные</h2>
